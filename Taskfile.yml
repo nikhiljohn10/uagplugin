@@ -1,0 +1,108 @@
+version: "3"
+
+# Taskfile for Go project development
+# Requires: https://taskfile.dev (install instructions below)
+
+vars:
+  BIN: uag
+  BUILD_DIR: bin
+  CMD_DIR: ./cmd
+  PKG: ./...
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task -l
+
+  tidy:
+    desc: Sync go.mod and go.sum
+    cmds:
+      - go mod tidy
+
+  fmt:
+    desc: Format code
+    cmds:
+      - go fmt {{.PKG}}
+
+  vet:
+    desc: Run go vet
+    deps: [fmt]
+    cmds:
+      - go vet {{.PKG}}
+
+  lint:
+    desc: Run linters (golangci-lint if available; falls back to go vet)
+    cmds:
+      - |
+        if command -v golangci-lint >/dev/null 2>&1; then
+          golangci-lint run ./...
+        else
+          echo "golangci-lint not found; running go vet instead"
+          go vet {{.PKG}}
+        fi
+
+  build:
+    desc: Build the binary into {{.BUILD_DIR}}/{{.BIN}}
+    cmds:
+      - mkdir -p {{.BUILD_DIR}}
+      - go build -o {{.BUILD_DIR}}/{{.BIN}} {{.CMD_DIR}}
+    sources:
+      - "**/*.go"
+    generates:
+      - "{{.BUILD_DIR}}/{{.BIN}}"
+
+  run:
+    desc: Run the app directly (passes CLI args)
+    env:
+      UAG_ENV: development
+    cmds:
+      - go run {{.CMD_DIR}} {{.CLI_ARGS}}
+
+  exec:
+    desc: Run the built binary (builds first)
+    deps: [build]
+    cmds:
+      - ./{{.BUILD_DIR}}/{{.BIN}} {{.CLI_ARGS}}
+
+  test:
+    desc: Run unit tests with race detector and coverage
+    cmds:
+      - go test -race -coverprofile=coverage.out {{.PKG}}
+      - go tool cover -func=coverage.out | tail -n 1 || true
+    sources:
+      - "**/*.go"
+    generates:
+      - coverage.out
+
+  clean:
+    desc: Remove build artifacts and clean test cache
+    cmds:
+      - rm -rf {{.BUILD_DIR}} coverage.out
+      - go clean -testcache
+
+  watch:
+    desc: Rebuild and run on changes (requires reflex)
+    cmds:
+      - |
+        if command -v reflex >/dev/null 2>&1; then
+          reflex -r '\.go$' -- sh -c 'task exec'
+        else
+          echo "Install reflex: go install github.com/cespare/reflex@latest"
+          exit 1
+        fi
+
+  release:
+    desc: Build a static Linux amd64 release binary
+    cmds:
+      - mkdir -p {{.BUILD_DIR}}
+      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags='-s -w' -o {{.BUILD_DIR}}/{{.BIN}}-linux-amd64 {{.CMD_DIR}}
+
+  verify:
+    desc: Quick checks (tidy, fmt, vet, test)
+    deps: [tidy, fmt, vet, test]
+
+  # gen:
+  #   desc: Run code generators (if any)
+  #   cmds:
+  #     - go generate {{.PKG}}\
