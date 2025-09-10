@@ -1,0 +1,74 @@
+name: Build binaries
+
+on:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.0"
+
+      - name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+          BINARY_NAME: uagplugin
+        run: |
+          mkdir -p dist
+          EXT=""
+          if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
+          OUT_DIR="dist/${GOOS}_${GOARCH}"
+          mkdir -p "$OUT_DIR"
+          go build -trimpath -ldflags "-s -w" -o "$OUT_DIR/${BINARY_NAME}${EXT}" .
+          ARCHIVE_BASENAME="${BINARY_NAME}_${GOOS}_${GOARCH}"
+          if [ "$GOOS" = "windows" ]; then
+            (cd "$OUT_DIR" && zip -r "../${ARCHIVE_BASENAME}.zip" "${BINARY_NAME}${EXT}")
+            echo "ARTIFACT=dist/${ARCHIVE_BASENAME}.zip" >> $GITHUB_ENV
+          else
+            (cd "$OUT_DIR" && tar -czf "../${ARCHIVE_BASENAME}.tar.gz" "${BINARY_NAME}${EXT}")
+            echo "ARTIFACT=dist/${ARCHIVE_BASENAME}.tar.gz" >> $GITHUB_ENV
+          fi
+
+      - name: Upload artifact ${{ matrix.goos }}/${{ matrix.goarch }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: uagplugin_${{ matrix.goos }}_${{ matrix.goarch }}
+          path: ${{ env.ARTIFACT }}
+          if-no-files-found: error
+          overwrite: true
+
+  # release:
+  #   runs-on: ubuntu-latest
+  #   needs: build
+  #   permissions:
+  #     contents: write
+  #   steps:
+  #     - name: Download build artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         path: artifacts
+
+  #     - name: Create GitHub Release and upload assets
+  #       uses: softprops/action-gh-release@v1
+  #       with:
+  #         tag_name: ${{ github.ref_name }}
+  #         name: ${{ github.ref_name }}
+  #         draft: false
+  #         prerelease: false
+  #         files: |
+  #           artifacts/**/*.zip
+  #           artifacts/**/*.tar.gz

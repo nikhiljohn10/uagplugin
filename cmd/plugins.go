@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,23 +14,42 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func pluginDirInstall(cmd *cobra.Command, args []string) {
-	var baseDir string
-	srcDir, _ := cmd.Flags().GetString("dir")
+func getBaseAndBuildDir() (baseDir, buildDir string, err error) {
 	if !logger.IsDebugMode() {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			logger.Error("Failed to get user home directory: %v", err)
-			return
+			return "", "", err
 		}
 		baseDir = filepath.Join(homeDir, ".uag")
 	} else {
 		baseDir = ".uag"
 	}
-
 	pluginsDir := filepath.Join(baseDir, "plugins")
-	buildDir := filepath.Join(pluginsDir, "build")
+	buildDir = filepath.Join(pluginsDir, "build")
+	return baseDir, buildDir, nil
+}
 
+func buildAndLog(pluginName, srcDir, buildDir, source string) {
+	logger.Info("Installing plugin from %s: %s", source, srcDir)
+	err := buildPlugin(pluginName, srcDir, buildDir)
+	if err != nil {
+		logger.Error("Failed to build plugin: %v", err)
+		return
+	}
+	logger.Info("Plugin installed successfully from %s: %s", source, srcDir)
+}
+
+func pluginInstall(cmd *cobra.Command, args []string) {
+	srcDir, _ := cmd.Flags().GetString("dir")
+	if srcDir == "" {
+		pluginRepoInstall(cmd, args)
+		return
+	}
+	pluginDirInstall(cmd, args)
+}
+
+func pluginDirInstall(cmd *cobra.Command, args []string) {
+	srcDir, _ := cmd.Flags().GetString("dir")
 	if srcDir == "" {
 		logger.Error("No directory specified. Use --dir to provide a plugin directory.")
 		return
@@ -39,29 +59,17 @@ func pluginDirInstall(cmd *cobra.Command, args []string) {
 		logger.Error("Invalid directory specified: %s", srcDir)
 		return
 	}
-	pluginName := filepath.Base(filepath.Clean(srcDir))
-	logger.Info("Installing plugin from directory: %s", srcDir)
-	err = buildPlugin(pluginName, srcDir, buildDir)
+	pluginName := strings.ToLower(filepath.Base(filepath.Clean(srcDir)))
+	pluginName = strings.TrimPrefix(strings.TrimSuffix(pluginName, filepath.Ext(pluginName)), "uag-")
+	_, buildDir, err := getBaseAndBuildDir()
 	if err != nil {
-		logger.Error("Failed to build plugin: %v", err)
+		logger.Error("Failed to get build directory: %v", err)
 		return
 	}
-	logger.Info("Plugin installed successfully from directory: %s", srcDir)
+	buildAndLog(pluginName, srcDir, buildDir, "directory")
 }
 
-func pluginInstall(cmd *cobra.Command, args []string) {
-	var baseDir string
-	if !logger.IsDebugMode() {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			logger.Error("Failed to get user home directory: %v", err)
-			return
-		}
-		baseDir = filepath.Join(homeDir, ".uag")
-	} else {
-		baseDir = ".uag"
-	}
-
+func pluginRepoInstall(cmd *cobra.Command, args []string) {
 	repoURL := args[0]
 	if !strings.HasPrefix(repoURL, "https://github.com") && !strings.HasPrefix(repoURL, "github.com") {
 		logger.Error("Invalid repository URL")
@@ -74,11 +82,14 @@ func pluginInstall(cmd *cobra.Command, args []string) {
 	parts := strings.Split(repoURL, "/")
 	pluginName := parts[len(parts)-1]
 
+	baseDir, buildDir, err := getBaseAndBuildDir()
+	if err != nil {
+		logger.Error("Failed to get build directory: %v", err)
+		return
+	}
 	pluginsDir := filepath.Join(baseDir, "plugins")
-	buildDir := filepath.Join(pluginsDir, "build")
 	srcDir := filepath.Join(pluginsDir, "pkgs", pluginName)
 
-	logger.Info("Installing plugin: %s", pluginName)
 	if _, err := os.Stat(srcDir); err == nil {
 		if err := os.RemoveAll(srcDir); err != nil {
 			logger.Error("Failed to remove plugin directory: %v", err)
@@ -106,18 +117,13 @@ func pluginInstall(cmd *cobra.Command, args []string) {
 		auth := &http.BasicAuth{Username: "access_token", Password: token}
 		cloneOptions.Auth = auth
 	}
-	_, err := git.PlainClone(srcDir, false, cloneOptions)
+	_, err = git.PlainClone(srcDir, false, cloneOptions)
 	if err != nil {
 		logger.Error("Failed to clone plugin: %v", err)
 		return
 	}
 
-	err = buildPlugin(pluginName, srcDir, buildDir)
-	if err != nil {
-		logger.Error("Failed to build plugin: %v", err)
-		return
-	}
-	logger.Info("Plugin installed successfully from repo: %s", strings.TrimPrefix(repoURL, "https://"))
+	buildAndLog(pluginName, srcDir, buildDir, "repo")
 }
 
 func buildPlugin(pluginName, sourceDir, buildDir string, cleanup ...bool) error {
@@ -133,6 +139,7 @@ func buildPlugin(pluginName, sourceDir, buildDir string, cleanup ...bool) error 
 				return err
 			}
 		}
+		return fmt.Errorf("not a UAG plugin")
 	}
 	soFile, err := filepath.Abs(filepath.Join(buildDir, pluginName+".so"))
 	if err != nil {
