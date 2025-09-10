@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"github.com/nikhiljohn10/uagplugin/internal/version"
@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var rootCmd = &cobra.Command{
+var Root = &cobra.Command{
 	Use:   "uagplugin",
 	Short: "UAG Plugin Tool is a cli application to manage plugins",
 	Long: `UAG Plugin Tool is a CLI application used to manage plugins that includes installing, testing and updating plugins.
@@ -33,9 +33,9 @@ var pluginInstallCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(versionCmd)
-	rootCmd.Version = version.Version
+	Root.AddCommand(versionCmd)
+	Root.Version = version.Version
 
 	pluginInstallCmd.Flags().String("token", "", "GitHub Personal Access Token for cloning private repositories")
-	rootCmd.AddCommand(pluginInstallCmd)
+	Root.AddCommand(pluginInstallCmd)
 }
