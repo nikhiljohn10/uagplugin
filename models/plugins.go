@@ -15,9 +15,17 @@ const (
 )
 
 type Contact struct {
-	ID    int64  `json:"id"`
+	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Email string `json:"email"`
+}
+
+type Contacts struct {
+	Source     string    `json:"source"`
+	Items      []Contact `json:"contacts"`
+	Count      int       `json:"count"`
+	Total      int       `json:"total"`
+	NextCursor *string   `json:"next_cursor,omitempty"`
 }
 
 type LedgerEntry struct {

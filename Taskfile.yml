@@ -1,12 +1,8 @@
 version: "3"
 
-# Taskfile for Go project development
-# Requires: https://taskfile.dev (install instructions below)
-
 vars:
-  BIN: uag
+  BIN: uagplugin
   BUILD_DIR: bin
-  CMD_DIR: ./cmd
   PKG: ./...
 
 tasks:
@@ -46,7 +42,7 @@ tasks:
     desc: Build the binary into {{.BUILD_DIR}}/{{.BIN}}
     cmds:
       - mkdir -p {{.BUILD_DIR}}
-      - go build -o {{.BUILD_DIR}}/{{.BIN}} {{.CMD_DIR}}
+      - go build -o {{.BUILD_DIR}}/{{.BIN}} .
     sources:
       - "**/*.go"
     generates:
@@ -57,7 +53,20 @@ tasks:
     env:
       UAG_ENV: development
     cmds:
-      - go run {{.CMD_DIR}} {{.CLI_ARGS}}
+      - go run . {{.CLI_ARGS}}
+
+  install:
+    desc: "Install a plugin from a GitHub repo URL (usage: task install REPO=<url> [TOKEN=<pat>])"
+    env:
+      UAG_ENV: development
+    cmds:
+      - |
+        REPO="{{.REPO}}"
+        if [ -z "$REPO" ]; then
+          echo "Usage: task install <github_repo_url> [--token <gh_pat>]" >&2
+          exit 1
+        fi
+        go run . install "$REPO"
 
   exec:
     desc: Run the built binary (builds first)
@@ -96,7 +105,8 @@ tasks:
     desc: Build a static Linux amd64 release binary
     cmds:
       - mkdir -p {{.BUILD_DIR}}
-      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags='-s -w' -o {{.BUILD_DIR}}/{{.BIN}}-linux-amd64 {{.CMD_DIR}}
+      - |
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags='-s -w' -o {{.BUILD_DIR}}/{{.BIN}}-linux-amd64 .
 
   verify:
     desc: Quick checks (tidy, fmt, vet, test)

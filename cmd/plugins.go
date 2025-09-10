@@ -13,19 +13,43 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func pluginInstall(cmd *cobra.Command, args []string) {
-	repoURL := args[0]
-	if !strings.HasPrefix(repoURL, "https://github.com") && !strings.HasPrefix(repoURL, "github.com") {
-		logger.Error("Invalid repository URL")
+func pluginDirInstall(cmd *cobra.Command, args []string) {
+	var baseDir string
+	srcDir, _ := cmd.Flags().GetString("dir")
+	if !logger.IsDebugMode() {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			logger.Error("Failed to get user home directory: %v", err)
+			return
+		}
+		baseDir = filepath.Join(homeDir, ".uag")
+	} else {
+		baseDir = ".uag"
+	}
+
+	pluginsDir := filepath.Join(baseDir, "plugins")
+	buildDir := filepath.Join(pluginsDir, "build")
+
+	if srcDir == "" {
+		logger.Error("No directory specified. Use --dir to provide a plugin directory.")
 		return
 	}
-	if strings.HasPrefix(repoURL, "github.com/") {
-		repoURL = "https://" + repoURL
+	stat, err := os.Stat(srcDir)
+	if err != nil || !stat.IsDir() {
+		logger.Error("Invalid directory specified: %s", srcDir)
+		return
 	}
-	parts := strings.Split(strings.TrimSuffix(repoURL, ".git"), "/")
-	pluginName := parts[len(parts)-1]
+	pluginName := filepath.Base(filepath.Clean(srcDir))
+	logger.Info("Installing plugin from directory: %s", srcDir)
+	err = buildPlugin(pluginName, srcDir, buildDir)
+	if err != nil {
+		logger.Error("Failed to build plugin: %v", err)
+		return
+	}
+	logger.Info("Plugin installed successfully from directory: %s", srcDir)
+}
 
-	// Determine base directory based on environment
+func pluginInstall(cmd *cobra.Command, args []string) {
 	var baseDir string
 	if !logger.IsDebugMode() {
 		homeDir, err := os.UserHomeDir()
@@ -37,6 +61,18 @@ func pluginInstall(cmd *cobra.Command, args []string) {
 	} else {
 		baseDir = ".uag"
 	}
+
+	repoURL := args[0]
+	if !strings.HasPrefix(repoURL, "https://github.com") && !strings.HasPrefix(repoURL, "github.com") {
+		logger.Error("Invalid repository URL")
+		return
+	}
+	if strings.HasPrefix(repoURL, "github.com/") {
+		repoURL = "https://" + repoURL
+	}
+	repoURL = strings.TrimSuffix(repoURL, ".git")
+	parts := strings.Split(repoURL, "/")
+	pluginName := parts[len(parts)-1]
 
 	pluginsDir := filepath.Join(baseDir, "plugins")
 	buildDir := filepath.Join(pluginsDir, "build")
@@ -76,26 +112,28 @@ func pluginInstall(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	goModFile := filepath.Join(srcDir, "go.mod")
-	if _, err := os.Stat(goModFile); os.IsNotExist(err) {
-		logger.Error("This repository is not a UAG plugin.")
-		if err := os.RemoveAll(srcDir); err != nil {
-			logger.Error("Failed to remove plugin directory: %v", err)
-		}
-		return
-	}
-
-	logger.Info("Building plugin as shared object file...")
 	err = buildPlugin(pluginName, srcDir, buildDir)
 	if err != nil {
 		logger.Error("Failed to build plugin: %v", err)
 		return
 	}
-	logger.Info("Plugin installed successfully.")
-	logger.Info("Installed Location: %s", buildDir)
+	logger.Info("Plugin installed successfully from repo: %s", strings.TrimPrefix(repoURL, "https://"))
 }
 
-func buildPlugin(pluginName, sourceDir, buildDir string) error {
+func buildPlugin(pluginName, sourceDir, buildDir string, cleanup ...bool) error {
+	logger.Info("Building plugin as shared object file...")
+
+	_, err1 := os.Stat(filepath.Join(sourceDir, "go.mod"))
+	_, err2 := os.Stat(filepath.Join(sourceDir, "plugin.go"))
+	if os.IsNotExist(err1) || os.IsNotExist(err2) {
+		logger.Error("This repository is not a UAG plugin.")
+		if len(cleanup) > 0 && cleanup[0] {
+			if err := os.RemoveAll(sourceDir); err != nil {
+				logger.Error("Failed to remove plugin directory: %v", err)
+				return err
+			}
+		}
+	}
 	soFile, err := filepath.Abs(filepath.Join(buildDir, pluginName+".so"))
 	if err != nil {
 		logger.Error("Failed to resolve absolute path for plugin .so file: %v", err)
@@ -113,5 +151,6 @@ func buildPlugin(pluginName, sourceDir, buildDir string) error {
 		logger.Error("Failed to build plugin as .so file: %v", err)
 		return err
 	}
+	logger.Info("Done.\nPlugin Installed Location: %s", buildDir)
 	return nil
 }
