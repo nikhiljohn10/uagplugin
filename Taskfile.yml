@@ -56,17 +56,11 @@ tasks:
       - go run . {{.CLI_ARGS}}
 
   install:
-    desc: "Install a plugin from a GitHub repo URL (usage: task install REPO=<url> [TOKEN=<pat>])"
+    desc: "Install example plugin"
     env:
       UAG_ENV: development
     cmds:
-      - |
-        REPO="{{.REPO}}"
-        if [ -z "$REPO" ]; then
-          echo "Usage: task install <github_repo_url> [--token <gh_pat>]" >&2
-          exit 1
-        fi
-        go run . install "$REPO"
+      - go run . install --dir ./examples/uag-fileplugin
 
   exec:
     desc: Run the built binary (builds first)

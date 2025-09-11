@@ -14,6 +14,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func pluginInstall(cmd *cobra.Command, args []string) {
+	srcDir, _ := cmd.Flags().GetString("dir")
+	pluginName, _ := cmd.Flags().GetString("name")
+	if srcDir == "" {
+		token, _ := cmd.Flags().GetString("token")
+		repoUrl, _ := cmd.Flags().GetString("url")
+		pluginRepoInstall(pluginName, token, repoUrl)
+		return
+	}
+	pluginDirInstall(pluginName, srcDir)
+}
+
 func getBaseAndBuildDir() (baseDir, buildDir string, err error) {
 	if !logger.IsDebugMode() {
 		homeDir, err := os.UserHomeDir()
@@ -39,28 +51,16 @@ func buildAndLog(pluginName, srcDir, buildDir, source string) {
 	logger.Info("Plugin installed successfully from %s: %s", source, srcDir)
 }
 
-func pluginInstall(cmd *cobra.Command, args []string) {
-	srcDir, _ := cmd.Flags().GetString("dir")
-	if srcDir == "" {
-		pluginRepoInstall(cmd, args)
-		return
-	}
-	pluginDirInstall(cmd, args)
-}
-
-func pluginDirInstall(cmd *cobra.Command, args []string) {
-	srcDir, _ := cmd.Flags().GetString("dir")
-	if srcDir == "" {
-		logger.Error("No directory specified. Use --dir to provide a plugin directory.")
-		return
-	}
+func pluginDirInstall(pluginName, srcDir string) {
 	stat, err := os.Stat(srcDir)
 	if err != nil || !stat.IsDir() {
 		logger.Error("Invalid directory specified: %s", srcDir)
 		return
 	}
-	pluginName := strings.ToLower(filepath.Base(filepath.Clean(srcDir)))
-	pluginName = strings.TrimPrefix(strings.TrimSuffix(pluginName, filepath.Ext(pluginName)), "uag-")
+	if pluginName == "" {
+		pluginName = strings.ToLower(filepath.Base(filepath.Clean(srcDir)))
+		pluginName = strings.TrimPrefix(strings.TrimSuffix(pluginName, filepath.Ext(pluginName)), "uag-")
+	}
 	_, buildDir, err := getBaseAndBuildDir()
 	if err != nil {
 		logger.Error("Failed to get build directory: %v", err)
@@ -69,8 +69,7 @@ func pluginDirInstall(cmd *cobra.Command, args []string) {
 	buildAndLog(pluginName, srcDir, buildDir, "directory")
 }
 
-func pluginRepoInstall(cmd *cobra.Command, args []string) {
-	repoURL := args[0]
+func pluginRepoInstall(pluginName, token, repoURL string) {
 	if !strings.HasPrefix(repoURL, "https://github.com") && !strings.HasPrefix(repoURL, "github.com") {
 		logger.Error("Invalid repository URL")
 		return
@@ -80,8 +79,9 @@ func pluginRepoInstall(cmd *cobra.Command, args []string) {
 	}
 	repoURL = strings.TrimSuffix(repoURL, ".git")
 	parts := strings.Split(repoURL, "/")
-	pluginName := parts[len(parts)-1]
-
+	if pluginName == "" {
+		pluginName = parts[len(parts)-1]
+	}
 	baseDir, buildDir, err := getBaseAndBuildDir()
 	if err != nil {
 		logger.Error("Failed to get build directory: %v", err)
@@ -96,7 +96,6 @@ func pluginRepoInstall(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	token, _ := cmd.Flags().GetString("token")
 	if token == "" {
 		token = os.Getenv("GITHUB_TOKEN")
 	}

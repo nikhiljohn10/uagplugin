@@ -26,26 +26,19 @@ var versionCmd = &cobra.Command{
 }
 
 var pluginInstallCmd = &cobra.Command{
-	Use:   "install [repo-url]",
+	Use:   "install",
 	Short: "Install a plugin from a GitHub repository",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.NoArgs,
 	Run:   pluginInstall,
-}
-
-var pluginDirInstallCmd = &cobra.Command{
-	Use:   "installDir [plugin-dir]",
-	Short: "Install a plugin from a directory",
-	Args:  cobra.ExactArgs(1),
-	Run:   pluginDirInstall,
 }
 
 func init() {
 	Root.AddCommand(versionCmd)
 	Root.Version = version.Version
 
+	pluginInstallCmd.Flags().String("url", "", "GitHub repository URL")
 	pluginInstallCmd.Flags().String("token", "", "GitHub Personal Access Token for cloning private repositories")
+	pluginInstallCmd.Flags().String("dir", "", "Directory of the plugin to install (if installing from local directory)")
+	pluginInstallCmd.Flags().String("name", "", "Name of the plugin")
 	Root.AddCommand(pluginInstallCmd)
-
-	pluginDirInstallCmd.Flags().String("name", "", "Name of the plugin")
-	Root.AddCommand(pluginDirInstallCmd)
 }
