@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/nikhiljohn10/uagplugin/internal/version"
 	"github.com/nikhiljohn10/uagplugin/logger"
+	"github.com/nikhiljohn10/uagplugin/typing"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +22,7 @@ var versionCmd = &cobra.Command{
 	Short: "Print the version number",
 	Long:  `Print the version number of UAG.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		logger.Info("UAG %s (commit %s, built %s)", version.Version, version.Commit, version.Date)
+		logger.Info("UAG %s (commit %s, built %s) | contract %s (min %s)", version.Version, version.Commit, version.Date, typing.ContractVersion, typing.MinSupportedContractVersion)
 	},
 }
 
@@ -29,7 +30,7 @@ var pluginInstallCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Install a plugin from a GitHub repository",
 	Args:  cobra.NoArgs,
-	Run:   pluginInstall,
+	Run:   func(cmd *cobra.Command, args []string) { pluginInstall(cmd.Context(), cmd, args) },
 }
 
 func init() {

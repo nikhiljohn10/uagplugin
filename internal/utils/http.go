@@ -1,16 +1,25 @@
 package utils
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"regexp"
+	"time"
 
 	"github.com/nikhiljohn10/uagplugin/logger"
 )
 
-func IsRepoPublic(apiURL string, token string) bool {
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", apiURL, nil)
+// IsRepoPublic checks GitHub repo visibility with a bounded timeout and context.
+// Caller should pass a context with deadline; a default 5s client timeout also applies.
+func IsRepoPublic(ctx context.Context, apiURL string, token string) bool {
+	if ctx == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
 		logger.Warn("Could not create request for repo privacy: %v", err)
 		return false

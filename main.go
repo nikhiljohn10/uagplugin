@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/joho/godotenv"
 	"github.com/nikhiljohn10/uagplugin/cmd"
@@ -9,7 +12,10 @@ import (
 )
 
 func main() {
-	if err := cmd.Root.Execute(); err != nil {
+	// Create a root context that cancels on SIGINT/SIGTERM
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := cmd.Root.ExecuteContext(ctx); err != nil {
 		logger.Fatal("%v", err)
 		os.Exit(1)
 	}

@@ -1,4 +1,4 @@
-module github.com/nikhiljohn10/uag-fileplugin
+module github.com/nikhiljohn10/uag-apiplugin
 
 go 1.25
 

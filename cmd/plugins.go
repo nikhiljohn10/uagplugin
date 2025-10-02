@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
@@ -14,16 +16,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func pluginInstall(cmd *cobra.Command, args []string) {
+func pluginInstall(ctx context.Context, cmd *cobra.Command, args []string) {
 	srcDir, _ := cmd.Flags().GetString("dir")
 	pluginName, _ := cmd.Flags().GetString("name")
 	if srcDir == "" {
 		token, _ := cmd.Flags().GetString("token")
 		repoUrl, _ := cmd.Flags().GetString("url")
-		pluginRepoInstall(pluginName, token, repoUrl)
+		pluginRepoInstall(ctx, pluginName, token, repoUrl)
 		return
 	}
-	pluginDirInstall(pluginName, srcDir)
+	pluginDirInstall(ctx, pluginName, srcDir)
 }
 
 func getBaseAndBuildDir() (baseDir, buildDir string, err error) {
@@ -41,9 +43,9 @@ func getBaseAndBuildDir() (baseDir, buildDir string, err error) {
 	return baseDir, buildDir, nil
 }
 
-func buildAndLog(pluginName, srcDir, buildDir, source string) {
+func buildAndLog(ctx context.Context, pluginName, srcDir, buildDir, source string) {
 	logger.Info("Installing plugin from %s: %s", source, srcDir)
-	err := buildPlugin(pluginName, srcDir, buildDir)
+	err := buildPlugin(ctx, pluginName, srcDir, buildDir)
 	if err != nil {
 		logger.Error("Failed to build plugin: %v", err)
 		return
@@ -51,7 +53,7 @@ func buildAndLog(pluginName, srcDir, buildDir, source string) {
 	logger.Info("Plugin installed successfully from %s: %s", source, srcDir)
 }
 
-func pluginDirInstall(pluginName, srcDir string) {
+func pluginDirInstall(ctx context.Context, pluginName, srcDir string) {
 	stat, err := os.Stat(srcDir)
 	if err != nil || !stat.IsDir() {
 		logger.Error("Invalid directory specified: %s", srcDir)
@@ -66,10 +68,10 @@ func pluginDirInstall(pluginName, srcDir string) {
 		logger.Error("Failed to get build directory: %v", err)
 		return
 	}
-	buildAndLog(pluginName, srcDir, buildDir, "directory")
+	buildAndLog(ctx, pluginName, srcDir, buildDir, "directory")
 }
 
-func pluginRepoInstall(pluginName, token, repoURL string) {
+func pluginRepoInstall(ctx context.Context, pluginName, token, repoURL string) {
 	if !strings.HasPrefix(repoURL, "https://github.com") && !strings.HasPrefix(repoURL, "github.com") {
 		logger.Error("Invalid repository URL")
 		return
@@ -102,7 +104,12 @@ func pluginRepoInstall(pluginName, token, repoURL string) {
 
 	owner := parts[len(parts)-2]
 	apiURL := "https://api.github.com/repos/" + owner + "/" + pluginName
-	isPublic := utils.IsRepoPublic(apiURL, token)
+	var cancel context.CancelFunc
+	if _, ok := ctx.Deadline(); !ok {
+		ctx, cancel = context.WithTimeout(ctx, 6*time.Second)
+		defer cancel()
+	}
+	isPublic := utils.IsRepoPublic(ctx, apiURL, token)
 
 	cloneOptions := &git.CloneOptions{
 		URL:      repoURL,
@@ -122,10 +129,10 @@ func pluginRepoInstall(pluginName, token, repoURL string) {
 		return
 	}
 
-	buildAndLog(pluginName, srcDir, buildDir, "repo")
+	buildAndLog(ctx, pluginName, srcDir, buildDir, "repo")
 }
 
-func buildPlugin(pluginName, sourceDir, buildDir string, cleanup ...bool) error {
+func buildPlugin(ctx context.Context, pluginName, sourceDir, buildDir string, cleanup ...bool) error {
 	logger.Info("Building plugin as shared object file...")
 
 	_, err1 := os.Stat(filepath.Join(sourceDir, "go.mod"))
@@ -149,7 +156,13 @@ func buildPlugin(pluginName, sourceDir, buildDir string, cleanup ...bool) error 
 		logger.Error("Failed to create compiled plugins directory: %v", err)
 		return err
 	}
-	cmdBuild := exec.Command("go", "build", "-buildmode=plugin", "-o", soFile, ".")
+	// Enforce a build timeout to avoid indefinite hangs
+	var cancel context.CancelFunc
+	if _, ok := ctx.Deadline(); !ok {
+		ctx, cancel = context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+	}
+	cmdBuild := exec.CommandContext(ctx, "go", "build", "-buildmode=plugin", "-o", soFile, ".")
 	cmdBuild.Dir = sourceDir
 	cmdBuild.Stdout = os.Stdout
 	cmdBuild.Stderr = os.Stderr

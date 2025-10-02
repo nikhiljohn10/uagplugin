@@ -2,10 +2,12 @@ package logger
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"sync"
+	"time"
 )
 
 type Level int
@@ -77,7 +79,15 @@ func logf(level Level, prefix string, format string, args ...any) {
 	// Send alert if critical and webhook is set
 	if level == CriticalLevel && alertWebhookURL != "" {
 		go func(payload string) {
-			http.Post(alertWebhookURL, "application/json", bytes.NewBuffer([]byte(fmt.Sprintf(`{"message":%q}`, payload))))
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, alertWebhookURL, bytes.NewBuffer([]byte(fmt.Sprintf(`{"message":%q}`, payload))))
+			if err != nil {
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+			client := &http.Client{Timeout: 3 * time.Second}
+			_, _ = client.Do(req)
 		}(line)
 	}
 	if level == FatalLevel {
