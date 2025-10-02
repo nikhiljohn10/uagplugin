@@ -35,7 +35,9 @@ jobs:
           if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
           OUT_DIR="dist/${GOOS}_${GOARCH}"
           mkdir -p "$OUT_DIR"
-          go build -trimpath -ldflags "-s -w" -o "$OUT_DIR/${BINARY_NAME}${EXT}" .
+          BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          LDFLAGS="-s -w -X github.com/nikhiljohn10/uagplugin/internal/version.Version=${GITHUB_REF_NAME} -X github.com/nikhiljohn10/uagplugin/internal/version.Commit=${GITHUB_SHA} -X github.com/nikhiljohn10/uagplugin/internal/version.Date=${BUILD_DATE}"
+          go build -trimpath -ldflags "$LDFLAGS" -o "$OUT_DIR/${BINARY_NAME}${EXT}" .
           ARCHIVE_BASENAME="${BINARY_NAME}_${GOOS}_${GOARCH}"
           if [ "$GOOS" = "windows" ]; then
             (cd "$OUT_DIR" && zip -r "../${ARCHIVE_BASENAME}.zip" "${BINARY_NAME}${EXT}")
