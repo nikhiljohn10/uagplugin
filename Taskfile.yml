@@ -38,16 +38,6 @@ tasks:
           go vet {{.PKG}}
         fi
 
-  build:
-    desc: Build the binary into {{.BUILD_DIR}}/{{.BIN}}
-    cmds:
-      - mkdir -p {{.BUILD_DIR}}
-      - go build -o {{.BUILD_DIR}}/{{.BIN}} .
-    sources:
-      - "**/*.go"
-    generates:
-      - "{{.BUILD_DIR}}/{{.BIN}}"
-
   run:
     desc: Run the app directly (passes CLI args)
     env:
@@ -96,7 +86,7 @@ tasks:
           exit 1
         fi
 
-  release:
+  build-all:
     desc: Build release binaries for Linux, macOS, and Windows with embedded version info (uses latest tag by default)
     silent: true
     cmds:
@@ -117,7 +107,7 @@ tasks:
           if command -v sha256sum >/dev/null 2>&1; then sha256sum "$OUT" > "$OUT.sha256"; fi; \
         done
 
-  release-local:
+  build:
     desc: Build a release binary for the current platform with embedded version info
     silent: true
     cmds:
@@ -142,12 +132,11 @@ tasks:
         LDFLAGS="-X github.com/nikhiljohn10/uagplugin/internal/version.Version=${VERSION} -X github.com/nikhiljohn10/uagplugin/internal/version.Commit=${COMMIT} -X github.com/nikhiljohn10/uagplugin/internal/version.Date=${DATE}"; \
         go build -trimpath -ldflags "$LDFLAGS" -o /tmp/{{.BIN}} . && /tmp/{{.BIN}} version
 
-  tag:
-    desc: "Create and push an annotated git tag (usage: task tag VERSION=X.Y.Z)"
+  release:
+    desc: "Create and push an annotated git tag (usage: task release VERSION=X.Y.Z)"
     cmds:
-      - test -n "{{.VERSION}}" || (echo "Set VERSION=X.Y.Z via 'task tag VERSION=X.Y.Z'" && exit 1)
+      - test -n "{{.VERSION}}" || (echo "Set VERSION=X.Y.Z via 'task release VERSION=X.Y.Z'" && exit 1)
       - git tag -a v{{.VERSION}} -m "Release v{{.VERSION}}"
-      - git push origin
       - git push origin v{{.VERSION}}
 
   prepare:
