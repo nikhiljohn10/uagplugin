@@ -15,8 +15,15 @@ A CLI to manage UAG plugins: install from repos or local dirs, build, and test c
 
 ## Installation
 
-- From a release: download the archive for your OS/arch from GitHub Releases, extract the `uagplugin` binary and place it on your PATH.
-- From source:
+#### Recommended method
+
+`go install github.com/nikhiljohn10/uagplugin@latest`
+
+#### Download from release page
+
+Download the archive for your OS/arch from GitHub Releases, extract the `uagplugin` binary and place it on your PATH.
+
+#### Build from source
 
 ```
 # build a debug binary

@@ -139,6 +139,9 @@ tasks:
       - test -n "{{.VERSION}}" || (echo "Set VERSION=X.Y.Z via 'task release VERSION=X.Y.Z'" && exit 1)
       - git tag -a v{{.VERSION}} -m "Release v{{.VERSION}}"
       - git push origin v{{.VERSION}}
+      - echo "Waiting for GitHub to process the new tag..."
+      - sleep 5 && go install github.com/nikhiljohn10/uagplugin@v{{.VERSION}} && rm -f $(which uagplugin)
+      - echo "Released uagplugin v{{.VERSION}}."
 
   prepare:
     desc: Pre-flight checks before tagging (clean tree, verify, and show computed version)
