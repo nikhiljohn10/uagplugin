@@ -97,7 +97,8 @@ tasks:
         fi
 
   release:
-    desc: Build a static Linux amd64 release binary with embedded version info (uses latest tag by default)
+    desc: Build release binaries for Linux, macOS, and Windows with embedded version info (uses latest tag by default)
+    silent: true
     cmds:
       - mkdir -p {{.BUILD_DIR}}
       - |
@@ -105,12 +106,20 @@ tasks:
         COMMIT="$(git rev-parse --short HEAD)"; \
         DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; \
         LDFLAGS="-s -w -X github.com/nikhiljohn10/uagplugin/internal/version.Version=${VERSION} -X github.com/nikhiljohn10/uagplugin/internal/version.Commit=${COMMIT} -X github.com/nikhiljohn10/uagplugin/internal/version.Date=${DATE}"; \
-        echo "Building ${VERSION} (${COMMIT}) ${DATE} for linux/amd64"; \
-        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o {{.BUILD_DIR}}/{{.BIN}}-linux-amd64 .; \
-        (command -v sha256sum >/dev/null 2>&1 && sha256sum {{.BUILD_DIR}}/{{.BIN}}-linux-amd64 > {{.BUILD_DIR}}/{{.BIN}}-linux-amd64.sha256) || true
+        targets="linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64"; \
+        for target in $targets; do \
+          GOOS="${target%%/*}"; GOARCH="${target##*/}"; \
+          EXT=""; OUT_BASE="{{.BUILD_DIR}}/{{.BIN}}-${GOOS}-${GOARCH}-${VERSION}"; \
+          if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi; \
+          OUT="${OUT_BASE}${EXT}"; \
+          echo "Building ${VERSION} (${COMMIT}) ${DATE} for ${GOOS}/${GOARCH}"; \
+          CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags "$LDFLAGS" -o "$OUT" .; \
+          if command -v sha256sum >/dev/null 2>&1; then sha256sum "$OUT" > "$OUT.sha256"; fi; \
+        done
 
   release-local:
     desc: Build a release binary for the current platform with embedded version info
+    silent: true
     cmds:
       - mkdir -p {{.BUILD_DIR}}
       - |
@@ -122,7 +131,7 @@ tasks:
         go build -trimpath -ldflags "$LDFLAGS" -o {{.BUILD_DIR}}/{{.BIN}} .; \
         ./{{.BUILD_DIR}}/{{.BIN}} version
 
-  show-version:
+  version:
     desc: Preview version output using ldflags from git tag/commit/date (no artifact kept)
     silent: true
     cmds:
@@ -137,7 +146,6 @@ tasks:
     desc: "Create and push an annotated git tag (usage: task tag -- VERSION=vX.Y.Z)"
     cmds:
       - test -n "{{.VERSION}}" || (echo "Set VERSION=vX.Y.Z via 'task tag -- VERSION=vX.Y.Z'" && exit 1)
-      - git commit -a -m "bump to version {{.VERSION}}" || (echo "No changes to commit" && exit 0)
       - git tag -a {{.VERSION}} -m "Release {{.VERSION}}"
       - git push origin
       - git push origin {{.VERSION}}
@@ -147,7 +155,7 @@ tasks:
     cmds:
       # - git diff --quiet HEAD || (echo "Working tree not clean. Commit or stash changes before releasing." && exit 1)
       - task: verify
-      - task: show-version
+      - task: version
 
   verify:
     desc: Quick checks (tidy, fmt, vet, test)
