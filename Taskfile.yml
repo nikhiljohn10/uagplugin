@@ -134,6 +134,7 @@ tasks:
 
   release:
     desc: "Create and push an annotated git tag (usage: task release VERSION=X.Y.Z)"
+    silent: true
     cmds:
       - test -n "{{.VERSION}}" || (echo "Set VERSION=X.Y.Z via 'task release VERSION=X.Y.Z'" && exit 1)
       - git tag -a v{{.VERSION}} -m "Release v{{.VERSION}}"
@@ -142,7 +143,6 @@ tasks:
   prepare:
     desc: Pre-flight checks before tagging (clean tree, verify, and show computed version)
     cmds:
-      # - git diff --quiet HEAD || (echo "Working tree not clean. Commit or stash changes before releasing." && exit 1)
       - task: verify
       - task: version
 
