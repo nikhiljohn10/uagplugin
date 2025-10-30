@@ -1,5 +1,7 @@
 package models
 
+import "strings"
+
 type PaymentType string
 type DocType string
 
@@ -13,6 +15,14 @@ const (
 	DocTypeCreditNote      DocType = "credit_note"
 	DocTypePayment         DocType = "payment"
 )
+
+func (pt PaymentType) String() string {
+	return string(pt)
+}
+
+func (dt DocType) String() string {
+	return strings.ToTitle(strings.ReplaceAll(string(dt), "_", " "))
+}
 
 type Contact struct {
 	ID    string `json:"id"`
@@ -37,7 +47,7 @@ type LedgerEntry struct {
 }
 
 type Ledger struct {
-	ID            int64         `json:"id"`
+	ID            string        `json:"id"`
 	Entries       []LedgerEntry `json:"entries"`
 	CreditBalance string        `json:"credit_balance"`
 	CreditLimit   string        `json:"credit_limit"`
