@@ -39,15 +39,14 @@ type Contacts struct {
 }
 
 type LedgerEntry struct {
-	ID          int64        `json:"id"`
-	Date        string       `json:"date"`
-	DocType     DocType      `json:"doc_type"`
-	PaymentType *PaymentType `json:"payment_type"`
-	Amount      string       `json:"amount"`
+	ID          int64       `json:"id"`
+	Date        string      `json:"date"`
+	DocType     DocType     `json:"doc_type"`
+	PaymentType PaymentType `json:"payment_type"`
+	Amount      string      `json:"amount"`
 }
 
 type Ledger struct {
-	ID            string        `json:"id"`
 	Entries       []LedgerEntry `json:"entries"`
 	CreditBalance string        `json:"credit_balance"`
 	CreditLimit   string        `json:"credit_limit"`
