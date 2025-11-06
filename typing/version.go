@@ -8,11 +8,11 @@ import (
 
 // ContractVersion is the version of the plugin contract the host is built against.
 // Bump MAJOR for breaking changes, MINOR for backwards-compatible additions, PATCH for fixes.
-const ContractVersion = "1.0.0"
+const ContractVersion = "2.0.0"
 
 // MinSupportedContractVersion expresses the minimum contract version the host will accept.
 // Update this when dropping support for older contract versions.
-const MinSupportedContractVersion = "1.0.0"
+const MinSupportedContractVersion = "2.0.0"
 
 // ParseSemVer turns a semver-like string into (major, minor, patch), ignoring pre-release/build.
 func ParseSemVer(v string) (int, int, int) {
