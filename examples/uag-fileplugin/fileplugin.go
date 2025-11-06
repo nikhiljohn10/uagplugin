@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/csv"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -19,14 +18,16 @@ type filePlugin struct{}
 // Exported symbol for typed host loading
 var Plugin typing.Plugin = filePlugin{}
 
-func (filePlugin) Meta() map[string]any {
-	return map[string]any{
-		"platform_id":      "fileplugin",
-		"platform_name":    "File Plugin",
-		"version":          "1.0.0",
-		"author":           "Nikhil John",
-		"auth_type":        "none",
-		"contract_version": typing.ContractVersion,
+var _ typing.Plugin = (*filePlugin)(nil)
+
+func (filePlugin) Meta() *models.MetaData {
+	return &models.MetaData{
+		ID:              "fileplugin",
+		Name:            "File Plugin",
+		Version:         "1.0.0",
+		Author:          "Nikhil John",
+		AuthType:        "none",
+		ContractVersion: typing.ContractVersion,
 	}
 }
 
@@ -39,9 +40,8 @@ func (filePlugin) Meta() map[string]any {
 //   - Cursor: cursor-based pagination position (base64 encoded index)
 //
 // The auth parameter is unused here because this plugin is file-based.
-func (filePlugin) Contacts(auth models.AuthCredentials, params models.Params) (*models.Contacts, error) {
+func (filePlugin) Contacts(auth models.AuthCredentials, params models.ContactQueryParams) (*models.Contacts, error) {
 	// 'auth' is not used as this is a file-based plugin
-	src, _ := Meta()["platform_id"].(string)
 	r := csv.NewReader(strings.NewReader(contactCSV))
 	records, err := r.ReadAll()
 	if err != nil {
@@ -60,9 +60,9 @@ func (filePlugin) Contacts(auth models.AuthCredentials, params models.Params) (*
 			}
 		}
 		// Filter by search text against name (case-insensitive)
-		if params.SearchText != "" && !strings.Contains(
+		if params.Search != "" && !strings.Contains(
 			strings.ToLower(rec[1]),
-			strings.ToLower(params.SearchText),
+			strings.ToLower(params.Search),
 		) {
 			continue
 		}
@@ -74,23 +74,12 @@ func (filePlugin) Contacts(auth models.AuthCredentials, params models.Params) (*
 		})
 	}
 
-	// Optional sorting by name
-	if params.Sort {
-		if params.SortOrder == "" || strings.ToLower(params.SortOrder) == "asc" {
-			sort.SliceStable(contacts, func(i, j int) bool {
-				return contacts[i].Name < contacts[j].Name
-			})
-		} else {
-			sort.SliceStable(contacts, func(i, j int) bool {
-				return contacts[i].Name > contacts[j].Name
-			})
-		}
-	}
+	utils.SortContacts(&contacts, params.SortDescending)
 
 	// Cursor-based pagination (page size 20)
 	pagedContacts, nextCursor := utils.PaginateCursor(contacts, params.Cursor, 20)
+
 	return &models.Contacts{
-		Source:     src,
 		Items:      pagedContacts,
 		Count:      len(pagedContacts),
 		Total:      len(contacts),
@@ -102,7 +91,7 @@ func (filePlugin) Contacts(auth models.AuthCredentials, params models.Params) (*
 func (filePlugin) Health() string { return "ok" }
 
 // Ledger reads the embedded CSV and returns a paginated list of ledger entries.
-func (filePlugin) Ledger(auth models.AuthCredentials, params models.Params) (*models.Ledger, error) {
+func (filePlugin) Ledger(auth models.AuthCredentials, params models.LedgerQueryParams) (*models.Ledger, error) {
 	r := csv.NewReader(strings.NewReader(ledgerCSV))
 	records, err := r.ReadAll()
 	if err != nil {
@@ -118,22 +107,6 @@ func (filePlugin) Ledger(auth models.AuthCredentials, params models.Params) (*mo
 			DocType: models.DocType(record[2]),
 			Amount:  record[3],
 		})
-	}
-
-	// Filter by IDs if provided
-	if len(params.SearchIDs) > 0 {
-		idMap := make(map[int64]bool)
-		for _, idStr := range params.SearchIDs {
-			id, _ := strconv.ParseInt(idStr, 10, 64)
-			idMap[id] = true
-		}
-		var filtered []models.LedgerEntry
-		for _, entry := range entries {
-			if idMap[entry.ID] {
-				filtered = append(filtered, entry)
-			}
-		}
-		entries = filtered
 	}
 
 	// Paginate with a page size of 5

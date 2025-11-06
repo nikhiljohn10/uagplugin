@@ -22,11 +22,11 @@ var contactCSV string
 var ledgerCSV string
 
 // Back-compat: keep top-level functions delegating to the instance
-func Meta() map[string]any { return Plugin.Meta() }
-func Health() string       { return Plugin.Health() }
-func Contacts(a models.AuthCredentials, p models.Params) (*models.Contacts, error) {
+func Meta() *models.MetaData { return Plugin.Meta() }
+func Health() string         { return Plugin.Health() }
+func Contacts(a models.AuthCredentials, p models.ContactQueryParams) (*models.Contacts, error) {
 	return Plugin.Contacts(a, p)
 }
-func Ledger(a models.AuthCredentials, p models.Params) (*models.Ledger, error) {
+func Ledger(a models.AuthCredentials, p models.LedgerQueryParams) (*models.Ledger, error) {
 	return Plugin.Ledger(a, p)
 }

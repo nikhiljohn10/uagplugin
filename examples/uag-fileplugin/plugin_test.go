@@ -15,7 +15,7 @@ func TestHealth(t *testing.T) {
 
 func TestContactsBasic(t *testing.T) {
 	tk.WithEnv(tk.TestVars{"UAG_TEST": "1"}, func() {
-		out, err := Contacts(nil, models.Params{SearchText: "doe"})
+		out, err := Contacts(nil, models.ContactQueryParams{Search: "doe"})
 		if err != nil {
 			t.Fatalf("Contacts error: %v", err)
 		}
@@ -26,7 +26,7 @@ func TestContactsBasic(t *testing.T) {
 }
 
 func TestLedgerBasic(t *testing.T) {
-	lg, err := Ledger(nil, models.Params{})
+	lg, err := Ledger(nil, models.LedgerQueryParams{})
 	if err != nil {
 		t.Fatalf("Ledger error: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestLedgerBasic(t *testing.T) {
 }
 
 func TestLedgerFilterByIDs(t *testing.T) {
-	lg, err := Ledger(nil, models.Params{SearchIDs: []string{"2", "5"}})
+	lg, err := Ledger(nil, models.LedgerQueryParams{CustomerID: "CUST-002"})
 	if err != nil {
 		t.Fatalf("Ledger error: %v", err)
 	}
