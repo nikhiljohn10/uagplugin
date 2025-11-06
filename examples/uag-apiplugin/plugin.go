@@ -21,6 +21,7 @@ import (
 
 	"github.com/nikhiljohn10/uagplugin/models"
 	"github.com/nikhiljohn10/uagplugin/typing"
+	"github.com/nikhiljohn10/uagplugin/utils"
 )
 
 // Default public demo API (can be overridden via params.Extra["base_url"] or
@@ -154,7 +155,7 @@ func (apiPlugin) Contacts(auth models.AuthCredentials, params models.Params) (*m
 	}
 
 	// Cursor-based pagination (page size 20)
-	items, next := models.PaginateCursor(contacts, params.Cursor, 20)
+	items, next := utils.PaginateCursor(contacts, params.Cursor, 20)
 	src, _ := Meta()["platform_id"].(string)
 	return &models.Contacts{
 		Source:     src,
@@ -166,8 +167,8 @@ func (apiPlugin) Contacts(auth models.AuthCredentials, params models.Params) (*m
 }
 
 // Ledger implements the core interface; demo returns an empty ledger.
-func (apiPlugin) Ledger(auth models.AuthCredentials, params models.Params) (models.Ledger, error) {
-	return models.Ledger{ID: 0, Entries: nil, CreditBalance: "0", CreditLimit: "0"}, nil
+func (apiPlugin) Ledger(auth models.AuthCredentials, params models.Params) (*models.Ledger, error) {
+	return &models.Ledger{Entries: nil, CustomerName: "", OpeningBalance: "0"}, nil
 }
 
 // Back-compat: keep top-level functions delegating to the instance
@@ -176,6 +177,6 @@ func Health() string       { return Plugin.Health() }
 func Contacts(a models.AuthCredentials, p models.Params) (*models.Contacts, error) {
 	return Plugin.Contacts(a, p)
 }
-func Ledger(a models.AuthCredentials, p models.Params) (models.Ledger, error) {
+func Ledger(a models.AuthCredentials, p models.Params) (*models.Ledger, error) {
 	return Plugin.Ledger(a, p)
 }
