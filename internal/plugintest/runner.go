@@ -36,16 +36,17 @@ func ModeFromString(s string) Mode {
 }
 
 type RunConfig struct {
-	BaseDir    string
-	BuildDir   string // legacy fallback
-	Name       string // legacy filter (deprecated)
-	Files      []string
-	SearchDirs []string
-	Timeout    time.Duration
-	Mode       Mode
-	Auth       models.AuthCredentials
-	Params     models.Params
-	JSON       bool
+	BaseDir       string
+	BuildDir      string // legacy fallback
+	Name          string // legacy filter (deprecated)
+	Files         []string
+	SearchDirs    []string
+	Timeout       time.Duration
+	Mode          Mode
+	Auth          models.AuthCredentials
+	ContactParams models.ContactQueryParams
+	LedgerParams  models.LedgerQueryParams
+	JSON          bool
 }
 
 type FuncResult struct {
@@ -187,15 +188,11 @@ func testOne(ctx context.Context, file string, cfg RunConfig) PluginResult {
 		}
 		if impl != nil {
 			// Compatibility check using Meta()["contract_version"] if present
-			pluginVer := ""
 			if meta := impl.Meta(); meta != nil {
-				if v, ok := meta["contract_version"].(string); ok {
-					pluginVer = v
+				if meta.ContractVersion != "" && !typing.IsCompatible(meta.ContractVersion) {
+					pr.Funcs = append(pr.Funcs, FuncResult{Name: "Contract", Status: "error", Error: typing.IncompatibilityMessage(meta.ContractVersion)})
+					return pr
 				}
-			}
-			if pluginVer != "" && !typing.IsCompatible(pluginVer) {
-				pr.Funcs = append(pr.Funcs, FuncResult{Name: "Contract", Status: "error", Error: typing.IncompatibilityMessage(pluginVer)})
-				return pr
 			}
 			// Helper invoker using ctx timeout wrapper
 			wrap := func(name string, f func() FuncResult) FuncResult {
@@ -236,14 +233,14 @@ func testOne(ctx context.Context, file string, cfg RunConfig) PluginResult {
 			}
 			// Contacts
 			pr.Funcs = append(pr.Funcs, wrap("Contacts", func() FuncResult {
-				if _, err := impl.Contacts(cfg.Auth, cfg.Params); err != nil {
+				if _, err := impl.Contacts(cfg.Auth, cfg.ContactParams); err != nil {
 					return FuncResult{Name: "Contacts", Status: "error", Error: err.Error()}
 				}
 				return FuncResult{Name: "Contacts", Status: "ok"}
 			}))
 			// Ledger (now core)
 			pr.Funcs = append(pr.Funcs, wrap("Ledger", func() FuncResult {
-				if _, err := impl.Ledger(cfg.Auth, cfg.Params); err != nil {
+				if _, err := impl.Ledger(cfg.Auth, cfg.LedgerParams); err != nil {
 					return FuncResult{Name: "Ledger", Status: "error", Error: err.Error()}
 				}
 				return FuncResult{Name: "Ledger", Status: "ok"}
@@ -279,10 +276,10 @@ func testOne(ctx context.Context, file string, cfg RunConfig) PluginResult {
 	// Meta
 	if sym, ok := look("Meta"); ok {
 		switch fn := sym.(type) {
-		case func() map[string]any:
+		case func() models.MetaData:
 			pr.Funcs = append(pr.Funcs, wrap("Meta", func() FuncResult {
 				meta := fn()
-				if v, ok := meta["contract_version"].(string); ok && v != "" && !typing.IsCompatible(v) {
+				if v := meta.ContractVersion; v != "" && !typing.IsCompatible(v) {
 					return FuncResult{Name: "Contract", Status: "error", Error: typing.IncompatibilityMessage(v)}
 				}
 				return FuncResult{Name: "Meta", Status: "ok"}
@@ -326,16 +323,9 @@ func testOne(ctx context.Context, file string, cfg RunConfig) PluginResult {
 	// Contacts
 	if sym, ok := look("Contacts"); ok {
 		switch fn := sym.(type) {
-		case func(models.AuthCredentials, models.Params) (*models.Contacts, error):
+		case func(models.AuthCredentials, models.ContactQueryParams) (*models.Contacts, error):
 			pr.Funcs = append(pr.Funcs, wrap("Contacts", func() FuncResult {
-				if _, err := fn(cfg.Auth, cfg.Params); err != nil {
-					return FuncResult{Name: "Contacts", Status: "error", Error: err.Error()}
-				}
-				return FuncResult{Name: "Contacts", Status: "ok"}
-			}))
-		case func(models.AuthCredentials, models.Params) (models.Contacts, error):
-			pr.Funcs = append(pr.Funcs, wrap("Contacts", func() FuncResult {
-				if _, err := fn(cfg.Auth, cfg.Params); err != nil {
+				if _, err := fn(cfg.Auth, cfg.ContactParams); err != nil {
 					return FuncResult{Name: "Contacts", Status: "error", Error: err.Error()}
 				}
 				return FuncResult{Name: "Contacts", Status: "ok"}
@@ -350,16 +340,9 @@ func testOne(ctx context.Context, file string, cfg RunConfig) PluginResult {
 	// Ledger (core)
 	if sym, ok := look("Ledger"); ok {
 		switch fn := sym.(type) {
-		case func(models.AuthCredentials, models.Params) (*models.Ledger, error):
+		case func(models.AuthCredentials, models.LedgerQueryParams) (*models.Ledger, error):
 			pr.Funcs = append(pr.Funcs, wrap("Ledger", func() FuncResult {
-				if _, err := fn(cfg.Auth, cfg.Params); err != nil {
-					return FuncResult{Name: "Ledger", Status: "error", Error: err.Error()}
-				}
-				return FuncResult{Name: "Ledger", Status: "ok"}
-			}))
-		case func(models.AuthCredentials, models.Params) (models.Ledger, error):
-			pr.Funcs = append(pr.Funcs, wrap("Ledger", func() FuncResult {
-				if _, err := fn(cfg.Auth, cfg.Params); err != nil {
+				if _, err := fn(cfg.Auth, cfg.LedgerParams); err != nil {
 					return FuncResult{Name: "Ledger", Status: "error", Error: err.Error()}
 				}
 				return FuncResult{Name: "Ledger", Status: "ok"}
