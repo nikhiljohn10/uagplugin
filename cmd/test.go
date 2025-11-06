@@ -52,10 +52,16 @@ var testCmd = &cobra.Command{
 				logger.Warn("Invalid --auth JSON: %v", err)
 			}
 		}
-		var params models.Params
-		if s, _ := cmd.Flags().GetString("params"); strings.TrimSpace(s) != "" {
-			if err := json.Unmarshal([]byte(s), &params); err != nil {
-				logger.Warn("Invalid --params JSON: %v", err)
+		var contact_params models.ContactQueryParams
+		if s, _ := cmd.Flags().GetString("contact_params"); strings.TrimSpace(s) != "" {
+			if err := json.Unmarshal([]byte(s), &contact_params); err != nil {
+				logger.Warn("Invalid --contact_params JSON: %v", err)
+			}
+		}
+		var ledger_params models.LedgerQueryParams
+		if s, _ := cmd.Flags().GetString("ledger_params"); strings.TrimSpace(s) != "" {
+			if err := json.Unmarshal([]byte(s), &ledger_params); err != nil {
+				logger.Warn("Invalid --ledger_params JSON: %v", err)
 			}
 		}
 
@@ -116,15 +122,16 @@ var testCmd = &cobra.Command{
 
 		// Run
 		res := plugintest.Run(cmd.Context(), plugintest.RunConfig{
-			BaseDir:    baseDir,
-			BuildDir:   buildDir,
-			Files:      files,
-			SearchDirs: searchDirs,
-			Timeout:    timeout,
-			Mode:       plugintest.ModeFromString(mode),
-			Auth:       auth,
-			Params:     params,
-			JSON:       jsonOut,
+			BaseDir:       baseDir,
+			BuildDir:      buildDir,
+			Files:         files,
+			SearchDirs:    searchDirs,
+			Timeout:       timeout,
+			Mode:          plugintest.ModeFromString(mode),
+			Auth:          auth,
+			ContactParams: contact_params,
+			LedgerParams:  ledger_params,
+			JSON:          jsonOut,
 		})
 
 		if jsonOut {
