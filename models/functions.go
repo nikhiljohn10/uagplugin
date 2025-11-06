@@ -1,6 +1,8 @@
 package models
 
 type AuthCredentials = map[string]string
+type MetaData = map[string]any
+
 type Params struct {
 	SearchText string   `json:"search"`
 	Cursor     string   `json:"cursor"`
@@ -12,6 +14,6 @@ type Params struct {
 }
 
 type AuthFunc func(AuthCredentials, Params) error
-type ContactsFunc func(AuthCredentials, Params) (Contacts, error)
-type LedgerFunc func(AuthCredentials, Params) (Ledger, error)
+type ContactsFunc func(AuthCredentials, Params) (*Contacts, error)
+type LedgerFunc func(AuthCredentials, Params) (*Ledger, error)
 type HealthFunc func() string
