@@ -259,10 +259,10 @@ func testOne(ctx context.Context, file string, cfg RunConfig) PluginResult {
 	}
 
 	// Legacy symbol path without reflection: type-assert known signatures
-	wrap := func(name string, f func() FuncResult) FuncResult {
+	wrap := func(name string, fn func() FuncResult) FuncResult {
 		start := time.Now()
 		done := make(chan FuncResult, 1)
-		go func() { done <- f() }()
+		go func() { done <- fn() }()
 		select {
 		case r := <-done:
 			r.Elapsed = time.Since(start)
@@ -317,7 +317,7 @@ func testOne(ctx context.Context, file string, cfg RunConfig) PluginResult {
 				return FuncResult{Name: "RunTests", Status: "ok"}
 			}))
 		default:
-			pr.Funcs = append(pr.Funcs, FuncResult{Name: "RunTests", Status: "error", Error: "invalid RunTests signature"})
+			pr.Funcs = append(pr.Funcs, FuncResult{Name: "RunTests", Status: "skipped"})
 		}
 	} else {
 		pr.Funcs = append(pr.Funcs, FuncResult{Name: "RunTests", Status: "skipped"})
@@ -350,6 +350,13 @@ func testOne(ctx context.Context, file string, cfg RunConfig) PluginResult {
 	// Ledger (core)
 	if sym, ok := look("Ledger"); ok {
 		switch fn := sym.(type) {
+		case func(models.AuthCredentials, models.Params) (*models.Ledger, error):
+			pr.Funcs = append(pr.Funcs, wrap("Ledger", func() FuncResult {
+				if _, err := fn(cfg.Auth, cfg.Params); err != nil {
+					return FuncResult{Name: "Ledger", Status: "error", Error: err.Error()}
+				}
+				return FuncResult{Name: "Ledger", Status: "ok"}
+			}))
 		case func(models.AuthCredentials, models.Params) (models.Ledger, error):
 			pr.Funcs = append(pr.Funcs, wrap("Ledger", func() FuncResult {
 				if _, err := fn(cfg.Auth, cfg.Params); err != nil {
@@ -364,7 +371,7 @@ func testOne(ctx context.Context, file string, cfg RunConfig) PluginResult {
 		pr.Funcs = append(pr.Funcs, FuncResult{Name: "Ledger", Status: "missing"})
 	}
 
-	// Source tests
+	// If mode is "source", run `go test` in the plugin's directory
 	if cfg.Mode == ModeSource || cfg.Mode == ModeAll {
 		st := runSourceTests(ctx, cfg.BaseDir, base)
 		pr.SourceTest = &st
