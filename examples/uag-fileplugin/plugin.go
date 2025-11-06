@@ -27,6 +27,6 @@ func Health() string       { return Plugin.Health() }
 func Contacts(a models.AuthCredentials, p models.Params) (*models.Contacts, error) {
 	return Plugin.Contacts(a, p)
 }
-func Ledger(a models.AuthCredentials, p models.Params) (models.Ledger, error) {
+func Ledger(a models.AuthCredentials, p models.Params) (*models.Ledger, error) {
 	return Plugin.Ledger(a, p)
 }
