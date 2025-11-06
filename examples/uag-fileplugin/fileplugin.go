@@ -9,6 +9,7 @@ import (
 
 	"github.com/nikhiljohn10/uagplugin/models"
 	"github.com/nikhiljohn10/uagplugin/typing"
+	"github.com/nikhiljohn10/uagplugin/utils"
 )
 
 // Meta returns basic information about the plugin such as id, name, version
@@ -48,7 +49,7 @@ func (filePlugin) Contacts(auth models.AuthCredentials, params models.Params) (*
 	}
 
 	var contacts []models.Contact
-	for _, rec := range records {
+	for _, rec := range records[1:] {
 		if len(rec) < 3 {
 			continue
 		}
@@ -87,7 +88,7 @@ func (filePlugin) Contacts(auth models.AuthCredentials, params models.Params) (*
 	}
 
 	// Cursor-based pagination (page size 20)
-	pagedContacts, nextCursor := models.PaginateCursor(contacts, params.Cursor, 20)
+	pagedContacts, nextCursor := utils.PaginateCursor(contacts, params.Cursor, 20)
 	return &models.Contacts{
 		Source:     src,
 		Items:      pagedContacts,
@@ -100,48 +101,48 @@ func (filePlugin) Contacts(auth models.AuthCredentials, params models.Params) (*
 // Health returns a simple constant to indicate the plugin is responsive.
 func (filePlugin) Health() string { return "ok" }
 
-// Ledger implements the core interface; demo returns an empty ledger object.
-func (filePlugin) Ledger(auth models.AuthCredentials, params models.Params) (models.Ledger, error) {
+// Ledger reads the embedded CSV and returns a paginated list of ledger entries.
+func (filePlugin) Ledger(auth models.AuthCredentials, params models.Params) (*models.Ledger, error) {
 	r := csv.NewReader(strings.NewReader(ledgerCSV))
-	rows, err := r.ReadAll()
+	records, err := r.ReadAll()
 	if err != nil {
-		return models.Ledger{}, err
+		return nil, err
 	}
+
 	var entries []models.LedgerEntry
-	for i, rec := range rows {
-		if i == 0 { // skip header
-			continue
-		}
-		if len(rec) < 5 {
-			continue
-		}
-		// Optional filter by SearchIDs (match on id column as string)
-		if len(params.SearchIDs) > 0 {
-			if idx := slices.IndexFunc(params.SearchIDs, func(s string) bool { return s == strings.TrimSpace(rec[0]) }); idx < 0 {
-				continue
-			}
-		}
-		// Parse ID
-		var id int64
-		if v, err := strconv.ParseInt(strings.TrimSpace(rec[0]), 10, 64); err == nil {
-			id = v
-		}
-		date := strings.TrimSpace(rec[1])
-		docType := models.DocType(strings.TrimSpace(rec[2]))
-		var ptype *models.PaymentType
-		if pt := strings.TrimSpace(rec[3]); pt != "" {
-			v := models.PaymentType(pt)
-			ptype = &v
-		}
-		amount := strings.TrimSpace(rec[4])
+	for _, record := range records[1:] { // Skip header
+		id, _ := strconv.ParseInt(record[0], 10, 64)
 		entries = append(entries, models.LedgerEntry{
-			ID:          id,
-			Date:        date,
-			DocType:     docType,
-			PaymentType: ptype,
-			Amount:      amount,
+			ID:      id,
+			Date:    record[1],
+			DocType: models.DocType(record[2]),
+			Amount:  record[3],
 		})
 	}
-	// For demo purposes keep balances zero; entries are what tests care about.
-	return models.Ledger{ID: 1, Entries: entries, CreditBalance: "0", CreditLimit: "0"}, nil
+
+	// Filter by IDs if provided
+	if len(params.SearchIDs) > 0 {
+		idMap := make(map[int64]bool)
+		for _, idStr := range params.SearchIDs {
+			id, _ := strconv.ParseInt(idStr, 10, 64)
+			idMap[id] = true
+		}
+		var filtered []models.LedgerEntry
+		for _, entry := range entries {
+			if idMap[entry.ID] {
+				filtered = append(filtered, entry)
+			}
+		}
+		entries = filtered
+	}
+
+	// Paginate with a page size of 5
+	paginatedEntries, nextCursor := utils.PaginateCursor(entries, params.Cursor, 5)
+
+	return &models.Ledger{
+		Entries:        paginatedEntries,
+		CustomerName:   "File-based Customer",
+		OpeningBalance: "100.00",
+		NextCursor:     nextCursor,
+	}, nil
 }
