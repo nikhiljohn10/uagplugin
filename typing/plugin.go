@@ -8,13 +8,17 @@ import "github.com/nikhiljohn10/uagplugin/models"
 //	var Plugin pluginapi.Plugin = MyPlugin{}
 type Plugin interface {
 	// Meta returns basic info (id, name, version, etc.).
-	Meta() models.MetaData
+	Meta() *models.MetaData
 	// Health performs a quick health probe, should return "ok" when healthy.
 	Health() string
-	// Contacts returns a (possibly paginated) list of contacts.
-	Contacts(auth models.AuthCredentials, params models.Params) (*models.Contacts, error)
+	// Contacts returns a list of contacts.
+	Contacts(auth models.AuthCredentials, params models.ContactQueryParams) (*models.Contacts, error)
 	// Ledger returns ledger data for the provided parameters.
-	Ledger(auth models.AuthCredentials, params models.Params) (*models.Ledger, error)
+	Ledger(auth models.AuthCredentials, params models.LedgerQueryParams) (*models.Ledger, error)
+}
+
+type Authenticator interface {
+	Auth(params models.AuthParams) (*models.AuthCredentials, error)
 }
 
 // Tester is an optional interface; if implemented, the host will call RunTests.
