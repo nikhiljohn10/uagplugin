@@ -24,7 +24,7 @@ func TestContactsWithMock(t *testing.T) {
 	defer server.Close()
 
 	tk.WithEnv(tk.TestVars{"API_BASE_URL": url}, func() {
-		out, err := Contacts(nil, models.Params{SearchText: "alice", Sort: true})
+		out, err := Contacts(nil, models.ContactQueryParams{Search: "alice", CommonParams: models.CommonParams{SortDescending: true}})
 		if err != nil {
 			t.Fatalf("Contacts error: %v", err)
 		}

@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -30,28 +29,25 @@ const defaultBaseURL = "https://jsonplaceholder.typicode.com"
 
 // Meta returns basic information about the plugin such as id, name, version
 // and the kind of authentication it requires ("none" for this demo plugin).
-type apiPlugin struct{}
+type ApiPlugin struct{}
 
 // Export typed Plugin symbol
-var Plugin typing.Plugin = apiPlugin{}
+var Plugin typing.Plugin = ApiPlugin{}
+var _ typing.Plugin = (*ApiPlugin)(nil)
 
-func (apiPlugin) Meta() map[string]any {
-	return map[string]any{
-		"platform_id":      "apiplugin",
-		"platform_name":    "API Plugin",
-		"version":          "1.0.0",
-		"author":           "UAG",
-		"auth_type":        "none",
-		"contract_version": typing.ContractVersion,
+func (ApiPlugin) Meta() *models.MetaData {
+	return &models.MetaData{
+		ID:              "apiplugin",
+		Name:            "API Plugin",
+		Version:         "1.0.0",
+		Author:          "UAG",
+		AuthType:        "none",
+		ContractVersion: typing.ContractVersion,
 	}
 }
 
 // Health returns a simple constant to indicate the plugin is responsive.
-func (apiPlugin) Health() string { return "ok" }
-
-// Auth validates credentials if the target API requires them. This demo API is
-// public, so Auth is a no-op and returns nil.
-func Auth(_ models.AuthCredentials, _ models.Params) error { return nil }
+func (ApiPlugin) Health() string { return "ok" }
 
 // API user shape we care about
 type apiUser struct {
@@ -61,12 +57,12 @@ type apiUser struct {
 }
 
 // baseURL resolves the API endpoint, in this order:
-//  1. params.Extra["base_url"]
+//  1. data["base_url"]
 //  2. API_BASE_URL environment variable
 //  3. defaultBaseURL
-func baseURL(params models.Params) string {
-	if params.Extra != nil {
-		if v, ok := params.Extra["base_url"]; ok && strings.TrimSpace(v) != "" {
+func baseURL(data map[string]string) string {
+	if data != nil {
+		if v, ok := data["base_url"]; ok && strings.TrimSpace(v) != "" {
 			return v
 		}
 	}
@@ -86,9 +82,9 @@ func baseURL(params models.Params) string {
 //
 // If the API requires authentication in the future, headers can be set based on
 // the provided AuthCredentials (e.g., bearer token).
-func (apiPlugin) Contacts(auth models.AuthCredentials, params models.Params) (*models.Contacts, error) {
+func (ApiPlugin) Contacts(auth models.AuthCredentials, params models.ContactQueryParams) (*models.Contacts, error) {
 	// Build URL of the users endpoint
-	url := strings.TrimRight(baseURL(params), "/") + "/users"
+	url := strings.TrimRight(baseURL(params.Extras), "/") + "/users"
 
 	// Fetch users from API
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
@@ -117,8 +113,8 @@ func (apiPlugin) Contacts(auth models.AuthCredentials, params models.Params) (*m
 		})
 	}
 
-	// Filter by SearchText (name or email)
-	if st := strings.ToLower(strings.TrimSpace(params.SearchText)); st != "" {
+	// Filter by Search (name or email)
+	if st := strings.ToLower(strings.TrimSpace(params.Search)); st != "" {
 		filtered := make([]models.Contact, 0, len(contacts))
 		for _, c := range contacts {
 			if strings.Contains(strings.ToLower(c.Name), st) || strings.Contains(strings.ToLower(c.Email), st) {
@@ -144,21 +140,12 @@ func (apiPlugin) Contacts(auth models.AuthCredentials, params models.Params) (*m
 	}
 
 	// Optional sorting by name
-	if params.Sort {
-		asc := strings.ToLower(params.SortOrder) != "desc"
-		sort.SliceStable(contacts, func(i, j int) bool {
-			if asc {
-				return contacts[i].Name < contacts[j].Name
-			}
-			return contacts[i].Name > contacts[j].Name
-		})
-	}
+	utils.SortContacts(&contacts, params.SortDescending)
 
 	// Cursor-based pagination (page size 20)
 	items, next := utils.PaginateCursor(contacts, params.Cursor, 20)
-	src, _ := Meta()["platform_id"].(string)
+
 	return &models.Contacts{
-		Source:     src,
 		Items:      items,
 		Count:      len(items),
 		Total:      len(contacts),
@@ -167,16 +154,16 @@ func (apiPlugin) Contacts(auth models.AuthCredentials, params models.Params) (*m
 }
 
 // Ledger implements the core interface; demo returns an empty ledger.
-func (apiPlugin) Ledger(auth models.AuthCredentials, params models.Params) (*models.Ledger, error) {
+func (ApiPlugin) Ledger(auth models.AuthCredentials, params models.LedgerQueryParams) (*models.Ledger, error) {
 	return &models.Ledger{Entries: nil, CustomerName: "", OpeningBalance: "0"}, nil
 }
 
 // Back-compat: keep top-level functions delegating to the instance
-func Meta() map[string]any { return Plugin.Meta() }
-func Health() string       { return Plugin.Health() }
-func Contacts(a models.AuthCredentials, p models.Params) (*models.Contacts, error) {
+func Meta() *models.MetaData { return Plugin.Meta() }
+func Health() string         { return Plugin.Health() }
+func Contacts(a models.AuthCredentials, p models.ContactQueryParams) (*models.Contacts, error) {
 	return Plugin.Contacts(a, p)
 }
-func Ledger(a models.AuthCredentials, p models.Params) (*models.Ledger, error) {
+func Ledger(a models.AuthCredentials, p models.LedgerQueryParams) (*models.Ledger, error) {
 	return Plugin.Ledger(a, p)
 }
