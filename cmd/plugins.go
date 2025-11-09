@@ -55,15 +55,49 @@ func parseVersion(v string) (semVer, error) {
 	return semVer{major, minor, patch}, nil
 }
 
+func checkInstallVersion(version string) error {
+	if version == "" {
+		return fmt.Errorf("version cannot be empty")
+	}
+	if version == "latest" {
+		return nil
+	}
+	_, err := parseVersion(version)
+	if err != nil {
+		return fmt.Errorf("invalid version format: %v", err)
+	}
+	return nil
+}
+
 func pluginInstall(cmd *cobra.Command, args []string) {
 	pluginName, _ := cmd.Flags().GetString("name")
 	token, _ := cmd.Flags().GetString("token")
-	u, err := url.ParseRequestURI(args[0])
+	repoUrl := args[0]
+	version := "latest"
+	if strings.Contains(args[0], "@") {
+		parts := strings.SplitN(args[0], "@", 2)
+		repoUrl = parts[0]
+		if len(parts) == 2 && parts[1] != "" {
+			version = strings.ToLower(parts[1])
+		}
+	}
+	if err := checkInstallVersion(version); err != nil {
+		logger.Error("Invalid version specified: %v", err)
+		return
+	}
+	if repoUrl == "" {
+		logger.Error("Repository URL cannot be empty.")
+		return
+	}
+	if !strings.HasPrefix(repoUrl, "http") {
+		repoUrl = "https://" + repoUrl
+	}
+	u, err := url.ParseRequestURI(repoUrl)
 	if err != nil || u.Host == "" {
 		logger.Error("Invalid repository URL")
 		return
 	}
-	pluginRepoInstall(cmd.Context(), pluginName, token, u)
+	pluginRepoInstall(cmd.Context(), pluginName, token, u, version)
 }
 
 func pluginInstallDir(cmd *cobra.Command, args []string) {
@@ -135,7 +169,7 @@ func pluginInstallDir(cmd *cobra.Command, args []string) {
 	utils.BuildAndLog(cmd.Context(), pluginName, srcDir, "dir")
 }
 
-func pluginRepoInstall(ctx context.Context, pluginName, token string, u *url.URL) {
+func pluginRepoInstall(ctx context.Context, pluginName, token string, u *url.URL, version string) {
 	if u.Host != "github.com" {
 		logger.Error("Only GitHub repositories are supported.")
 		return
@@ -195,14 +229,32 @@ func pluginRepoInstall(ctx context.Context, pluginName, token string, u *url.URL
 		return
 	}
 
+	var requestedVersion semVer
+	wantsSpecificVersion := version != "latest"
+	if wantsSpecificVersion {
+		parsedVersion, err := parseVersion(version)
+		if err != nil {
+			logger.Error("Invalid version requested: %v", err)
+			return
+		}
+		requestedVersion = parsedVersion
+	}
+
 	var latestVersion semVer
 	var latestTag *plumbing.Reference
 	var isLatestVersionSet bool
+	var requestedTag *plumbing.Reference
+
 	err = tagRefs.ForEach(func(ref *plumbing.Reference) error {
 		tagName := strings.TrimPrefix(ref.Name().String(), "refs/tags/")
 		v, err := parseVersion(tagName)
 		if err != nil {
 			return nil // Ignore invalid tags
+		}
+		if wantsSpecificVersion && requestedTag == nil {
+			if v == requestedVersion {
+				requestedTag = ref
+			}
 		}
 		if !isLatestVersionSet || v.isGreaterThan(latestVersion) {
 			latestVersion = v
@@ -216,20 +268,34 @@ func pluginRepoInstall(ctx context.Context, pluginName, token string, u *url.URL
 		return
 	}
 
-	if latestTag != nil {
+	var targetTag *plumbing.Reference
+	var targetVersion semVer
+	if wantsSpecificVersion {
+		if requestedTag == nil {
+			logger.Error("Requested version v%d.%d.%d not found", requestedVersion.major, requestedVersion.minor, requestedVersion.patch)
+			return
+		}
+		targetTag = requestedTag
+		targetVersion = requestedVersion
+	} else {
+		targetTag = latestTag
+		targetVersion = latestVersion
+	}
+
+	if targetTag != nil {
 		w, err := repo.Worktree()
 		if err != nil {
 			logger.Error("Failed to get worktree: %v", err)
 			return
 		}
 		err = w.Checkout(&git.CheckoutOptions{
-			Hash: latestTag.Hash(),
+			Hash: targetTag.Hash(),
 		})
 		if err != nil {
-			logger.Error("Failed to checkout latest tag: %v", err)
+			logger.Error("Failed to checkout tag: %v", err)
 			return
 		}
-		logger.Info("Checked out latest version: v%d.%d.%d", latestVersion.major, latestVersion.minor, latestVersion.patch)
+		logger.Info("Checked out version: v%d.%d.%d", targetVersion.major, targetVersion.minor, targetVersion.patch)
 	}
 
 	utils.BuildAndLog(ctx, pluginName, srcDir, "repo")
