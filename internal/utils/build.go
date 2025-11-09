@@ -13,7 +13,7 @@ import (
 
 // BuildAndLog is a wrapper around BuildPlugin that logs errors.
 func BuildAndLog(ctx context.Context, pluginName, srcDir, buildFrom string) {
-	buildDir, err := GetPluginBuildDir(pluginName)
+	buildDir, err := GetBuildDir()
 	if err != nil {
 		logger.Error("Failed to get plugin build dir: %v", err)
 		return

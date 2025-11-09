@@ -8,13 +8,13 @@ import (
 )
 
 // GetPluginBuildDir returns the directory where a specific plugin will be built.
-func GetPluginBuildDir(pluginName string) (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get user home directory: %w", err)
-	}
-	return filepath.Join(homeDir, ".uag", "plugins", "build", pluginName), nil
-}
+// func GetPluginBuildDir(pluginName string) (string, error) {
+// 	homeDir, err := os.UserHomeDir()
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to get user home directory: %w", err)
+// 	}
+// 	return filepath.Join(homeDir, ".uag", "plugins", "build", pluginName), nil
+// }
 
 // CopyFile copies a single file from src to dst.
 func CopyFile(src, dst string) error {
@@ -84,13 +84,26 @@ func CopyDir(src, dst string) error {
 	return nil
 }
 
-// GetBaseAndBuildDir returns the base and build directories for uag plugins.
-func GetBaseAndBuildDir() (string, string, error) {
+func GetBaseDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return "", "", fmt.Errorf("failed to get user home directory: %w", err)
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
 	}
-	baseDir := filepath.Join(homeDir, ".uag", "plugins")
-	buildDir := filepath.Join(baseDir, "build")
-	return baseDir, buildDir, nil
+	return filepath.Join(homeDir, ".uag", "plugins"), nil
+}
+
+func GetBuildDir() (string, error) {
+	baseDir, err := GetBaseDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(baseDir, "build"), nil
+}
+
+func GetBaseAndBuildDir() (string, string, error) {
+	baseDir, err := GetBaseDir()
+	if err != nil {
+		return "", "", err
+	}
+	return baseDir, filepath.Join(baseDir, "build"), nil
 }

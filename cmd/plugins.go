@@ -96,36 +96,43 @@ func pluginInstallDir(cmd *cobra.Command, args []string) {
 		srcDir = filepath.Dir(cwd)
 	}
 
+	// Get src absolute path
+	srcDir, err := filepath.Abs(srcDir)
+	if err != nil {
+		logger.Error("Failed to resolve absolute path: %v", err)
+		return
+	}
+
 	pluginName, _ := cmd.Flags().GetString("name")
 	if pluginName == "" {
 		pluginName = filepath.Base(srcDir)
 	}
 
-	buildDir, err := utils.GetPluginBuildDir(pluginName)
-	if err != nil {
-		logger.Error("Failed to get plugin build directory: %v", err)
-		return
-	}
+	// buildDir, err := utils.GetPluginBuildDir(pluginName)
+	// if err != nil {
+	// 	logger.Error("Failed to get plugin build directory: %v", err)
+	// 	return
+	// }
 
-	err = os.RemoveAll(buildDir)
-	if err != nil {
-		logger.Error("Failed to remove existing build directory: %v", err)
-		return
-	}
+	// err = os.RemoveAll(buildDir)
+	// if err != nil {
+	// 	logger.Error("Failed to remove existing build directory: %v", err)
+	// 	return
+	// }
 
-	err = os.MkdirAll(buildDir, 0755)
-	if err != nil {
-		logger.Error("Failed to create build directory: %v", err)
-		return
-	}
+	// err = os.MkdirAll(buildDir, 0755)
+	// if err != nil {
+	// 	logger.Error("Failed to create build directory: %v", err)
+	// 	return
+	// }
 
-	err = utils.CopyDir(srcDir, buildDir)
-	if err != nil {
-		logger.Error("Failed to copy plugin source to build directory: %v", err)
-		return
-	}
+	// err = utils.CopyDir(srcDir, buildDir)
+	// if err != nil {
+	// 	logger.Error("Failed to copy plugin source to build directory: %v", err)
+	// 	return
+	// }
 
-	utils.BuildAndLog(cmd.Context(), pluginName, buildDir, "dir")
+	utils.BuildAndLog(cmd.Context(), pluginName, srcDir, "dir")
 }
 
 func pluginRepoInstall(ctx context.Context, pluginName, token string, u *url.URL) {
@@ -138,13 +145,12 @@ func pluginRepoInstall(ctx context.Context, pluginName, token string, u *url.URL
 	if pluginName == "" {
 		pluginName = parts[len(parts)-1]
 	}
-	baseDir, _, err := utils.GetBaseAndBuildDir()
+	baseDir, err := utils.GetBaseDir()
 	if err != nil {
 		logger.Error("Failed to get build directory: %v", err)
 		return
 	}
-	pluginsDir := filepath.Join(baseDir, "plugins")
-	srcDir := filepath.Join(pluginsDir, "pkgs", pluginName)
+	srcDir := filepath.Join(baseDir, "pkgs", pluginName)
 
 	if _, err := os.Stat(srcDir); err == nil {
 		if err := os.RemoveAll(srcDir); err != nil {
