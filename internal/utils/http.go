@@ -11,14 +11,14 @@ import (
 )
 
 // IsRepoPublic checks GitHub repo visibility with a bounded timeout and context.
-// Caller should pass a context with deadline; a default 5s client timeout also applies.
+// Caller should pass a context with deadline; a default 10s client timeout also applies.
 func IsRepoPublic(ctx context.Context, apiURL string, token string) bool {
 	if ctx == nil {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 	}
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
 		logger.Warn("Could not create request for repo privacy: %v", err)
