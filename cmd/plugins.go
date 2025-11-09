@@ -7,21 +7,60 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/nikhiljohn10/uagplugin/internal/utils"
 	"github.com/nikhiljohn10/uagplugin/logger"
 	"github.com/spf13/cobra"
 )
 
+type semVer struct {
+	major, minor, patch int
+}
+
+func (s semVer) isGreaterThan(other semVer) bool {
+	if s.major != other.major {
+		return s.major > other.major
+	}
+	if s.minor != other.minor {
+		return s.minor > other.minor
+	}
+	return s.patch > other.patch
+}
+
+func parseVersion(v string) (semVer, error) {
+	v = strings.TrimPrefix(v, "v")
+	parts := strings.Split(v, ".")
+	if len(parts) != 3 {
+		return semVer{}, fmt.Errorf("invalid version format: %s", v)
+	}
+
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return semVer{}, fmt.Errorf("invalid major version: %s", parts[0])
+	}
+	minor, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return semVer{}, fmt.Errorf("invalid minor version: %s", parts[1])
+	}
+	patch, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return semVer{}, fmt.Errorf("invalid patch version: %s", parts[2])
+	}
+
+	return semVer{major, minor, patch}, nil
+}
+
 func pluginInstall(cmd *cobra.Command, args []string) {
 	pluginName, _ := cmd.Flags().GetString("name")
 	token, _ := cmd.Flags().GetString("token")
 	u, err := url.ParseRequestURI(args[0])
-	if err != nil || u.Scheme == "" || u.Host == "" {
+	if err != nil || u.Host == "" {
 		logger.Error("Invalid repository URL")
 		return
 	}
@@ -137,7 +176,7 @@ func pluginRepoInstall(ctx context.Context, pluginName, token string, repoURL *u
 	apiURL := "https://api.github.com/repos/" + owner + "/" + pluginName
 	var cancel context.CancelFunc
 	if _, ok := ctx.Deadline(); !ok {
-		ctx, cancel = context.WithTimeout(ctx, 6*time.Second)
+		ctx, cancel = context.WithTimeout(ctx, 15*time.Second)
 		defer cancel()
 	}
 	isPublic := utils.IsRepoPublic(ctx, apiURL, token)
@@ -154,10 +193,53 @@ func pluginRepoInstall(ctx context.Context, pluginName, token string, repoURL *u
 		auth := &http.BasicAuth{Username: "access_token", Password: token}
 		cloneOptions.Auth = auth
 	}
-	_, err = git.PlainClone(srcDir, false, cloneOptions)
+	repo, err := git.PlainClone(srcDir, false, cloneOptions)
 	if err != nil {
 		logger.Error("Failed to clone plugin: %v", err)
 		return
+	}
+
+	tagRefs, err := repo.Tags()
+	if err != nil {
+		logger.Error("Failed to get tags: %v", err)
+		return
+	}
+
+	var latestVersion semVer
+	var latestTag *plumbing.Reference
+	var isLatestVersionSet bool
+	err = tagRefs.ForEach(func(ref *plumbing.Reference) error {
+		tagName := strings.TrimPrefix(ref.Name().String(), "refs/tags/")
+		v, err := parseVersion(tagName)
+		if err != nil {
+			return nil // Ignore invalid tags
+		}
+		if !isLatestVersionSet || v.isGreaterThan(latestVersion) {
+			latestVersion = v
+			latestTag = ref
+			isLatestVersionSet = true
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Error("Failed to iterate over tags: %v", err)
+		return
+	}
+
+	if latestTag != nil {
+		w, err := repo.Worktree()
+		if err != nil {
+			logger.Error("Failed to get worktree: %v", err)
+			return
+		}
+		err = w.Checkout(&git.CheckoutOptions{
+			Hash: latestTag.Hash(),
+		})
+		if err != nil {
+			logger.Error("Failed to checkout latest tag: %v", err)
+			return
+		}
+		logger.Info("Checked out latest version: v%d.%d.%d", latestVersion.major, latestVersion.minor, latestVersion.patch)
 	}
 
 	buildAndLog(ctx, pluginName, srcDir, buildDir, "repo")
