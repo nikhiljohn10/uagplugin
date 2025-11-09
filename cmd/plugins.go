@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,16 +17,49 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func pluginInstall(ctx context.Context, cmd *cobra.Command, args []string) {
-	srcDir, _ := cmd.Flags().GetString("dir")
+func pluginInstall(cmd *cobra.Command, args []string) {
 	pluginName, _ := cmd.Flags().GetString("name")
-	if srcDir == "" {
-		token, _ := cmd.Flags().GetString("token")
-		repoUrl, _ := cmd.Flags().GetString("url")
-		pluginRepoInstall(ctx, pluginName, token, repoUrl)
+	token, _ := cmd.Flags().GetString("token")
+	u, err := url.ParseRequestURI(args[0])
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		logger.Error("Invalid repository URL")
 		return
 	}
-	pluginDirInstall(ctx, pluginName, srcDir)
+	pluginRepoInstall(cmd.Context(), pluginName, token, u)
+}
+
+func pluginInstallDir(cmd *cobra.Command, args []string) {
+	if len(args) < 1 {
+		logger.Error("Please provide the directory path of the plugin to install.")
+		return
+	}
+
+	if args[0] == "" {
+		logger.Error("Directory path cannot be empty.")
+		return
+	}
+
+	srcDir := args[0]
+	if srcDir == "." || srcDir == "./" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			logger.Error("Failed to get current working directory: %v", err)
+			return
+		}
+		srcDir = cwd
+	}
+
+	if srcDir == ".." || srcDir == "../" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			logger.Error("Failed to get current working directory: %v", err)
+			return
+		}
+		srcDir = filepath.Dir(cwd)
+	}
+
+	pluginName, _ := cmd.Flags().GetString("name")
+	pluginDirInstall(cmd.Context(), pluginName, srcDir)
 }
 
 func getBaseAndBuildDir() (baseDir, buildDir string, err error) {
@@ -71,16 +105,13 @@ func pluginDirInstall(ctx context.Context, pluginName, srcDir string) {
 	buildAndLog(ctx, pluginName, srcDir, buildDir, "directory")
 }
 
-func pluginRepoInstall(ctx context.Context, pluginName, token, repoURL string) {
-	if !strings.HasPrefix(repoURL, "https://github.com") && !strings.HasPrefix(repoURL, "github.com") {
-		logger.Error("Invalid repository URL")
+func pluginRepoInstall(ctx context.Context, pluginName, token string, repoURL *url.URL) {
+	if repoURL.Host != "github.com" {
+		logger.Error("Only GitHub repositories are supported.")
 		return
 	}
-	if strings.HasPrefix(repoURL, "github.com/") {
-		repoURL = "https://" + repoURL
-	}
-	repoURL = strings.TrimSuffix(repoURL, ".git")
-	parts := strings.Split(repoURL, "/")
+
+	parts := strings.Split(repoURL.Path, "/")
 	if pluginName == "" {
 		pluginName = parts[len(parts)-1]
 	}
@@ -112,7 +143,7 @@ func pluginRepoInstall(ctx context.Context, pluginName, token, repoURL string) {
 	isPublic := utils.IsRepoPublic(ctx, apiURL, token)
 
 	cloneOptions := &git.CloneOptions{
-		URL:      repoURL,
+		URL:      repoURL.String(),
 		Progress: nil,
 	}
 	if !isPublic {
