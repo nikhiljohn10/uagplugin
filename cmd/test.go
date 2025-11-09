@@ -10,6 +10,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/nikhiljohn10/uagplugin/internal/plugintest"
+	"github.com/nikhiljohn10/uagplugin/internal/utils"
 	"github.com/nikhiljohn10/uagplugin/logger"
 	"github.com/nikhiljohn10/uagplugin/models"
 	"github.com/spf13/cobra"
@@ -87,7 +88,7 @@ var testPlugins = func(cmd *cobra.Command, args []string) {
 	}
 
 	// Resolve dirs
-	baseDir, buildDir, err := getBaseAndBuildDir()
+	baseDir, buildDir, err := utils.GetBaseAndBuildDir()
 	if err != nil {
 		logger.Fatal("Failed to resolve plugin directories: %v", err)
 		return

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -98,63 +97,48 @@ func pluginInstallDir(cmd *cobra.Command, args []string) {
 	}
 
 	pluginName, _ := cmd.Flags().GetString("name")
-	pluginDirInstall(cmd.Context(), pluginName, srcDir)
-}
-
-func getBaseAndBuildDir() (baseDir, buildDir string, err error) {
-	if !logger.IsDebugMode() {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", "", err
-		}
-		baseDir = filepath.Join(homeDir, ".uag")
-	} else {
-		baseDir = ".uag"
-	}
-	pluginsDir := filepath.Join(baseDir, "plugins")
-	buildDir = filepath.Join(pluginsDir, "build")
-	return baseDir, buildDir, nil
-}
-
-func buildAndLog(ctx context.Context, pluginName, srcDir, buildDir, source string) {
-	logger.Info("Installing plugin from %s: %s", source, srcDir)
-	err := buildPlugin(ctx, pluginName, srcDir, buildDir)
-	if err != nil {
-		logger.Error("Failed to build plugin: %v", err)
-		return
-	}
-	logger.Info("Plugin installed successfully from %s: %s", source, srcDir)
-}
-
-func pluginDirInstall(ctx context.Context, pluginName, srcDir string) {
-	stat, err := os.Stat(srcDir)
-	if err != nil || !stat.IsDir() {
-		logger.Error("Invalid directory specified: %s", srcDir)
-		return
-	}
 	if pluginName == "" {
-		pluginName = strings.ToLower(filepath.Base(filepath.Clean(srcDir)))
-		pluginName = strings.TrimPrefix(strings.TrimSuffix(pluginName, filepath.Ext(pluginName)), "uag-")
+		pluginName = filepath.Base(srcDir)
 	}
-	_, buildDir, err := getBaseAndBuildDir()
+
+	buildDir, err := utils.GetPluginBuildDir(pluginName)
 	if err != nil {
-		logger.Error("Failed to get build directory: %v", err)
+		logger.Error("Failed to get plugin build directory: %v", err)
 		return
 	}
-	buildAndLog(ctx, pluginName, srcDir, buildDir, "directory")
+
+	err = os.RemoveAll(buildDir)
+	if err != nil {
+		logger.Error("Failed to remove existing build directory: %v", err)
+		return
+	}
+
+	err = os.MkdirAll(buildDir, 0755)
+	if err != nil {
+		logger.Error("Failed to create build directory: %v", err)
+		return
+	}
+
+	err = utils.CopyDir(srcDir, buildDir)
+	if err != nil {
+		logger.Error("Failed to copy plugin source to build directory: %v", err)
+		return
+	}
+
+	utils.BuildAndLog(cmd.Context(), pluginName, buildDir, "dir")
 }
 
-func pluginRepoInstall(ctx context.Context, pluginName, token string, repoURL *url.URL) {
-	if repoURL.Host != "github.com" {
+func pluginRepoInstall(ctx context.Context, pluginName, token string, u *url.URL) {
+	if u.Host != "github.com" {
 		logger.Error("Only GitHub repositories are supported.")
 		return
 	}
 
-	parts := strings.Split(repoURL.Path, "/")
+	parts := strings.Split(u.Path, "/")
 	if pluginName == "" {
 		pluginName = parts[len(parts)-1]
 	}
-	baseDir, buildDir, err := getBaseAndBuildDir()
+	baseDir, _, err := utils.GetBaseAndBuildDir()
 	if err != nil {
 		logger.Error("Failed to get build directory: %v", err)
 		return
@@ -182,7 +166,7 @@ func pluginRepoInstall(ctx context.Context, pluginName, token string, repoURL *u
 	isPublic := utils.IsRepoPublic(ctx, apiURL, token)
 
 	cloneOptions := &git.CloneOptions{
-		URL:      repoURL.String(),
+		URL:      u.String(),
 		Progress: nil,
 	}
 	if !isPublic {
@@ -242,47 +226,5 @@ func pluginRepoInstall(ctx context.Context, pluginName, token string, repoURL *u
 		logger.Info("Checked out latest version: v%d.%d.%d", latestVersion.major, latestVersion.minor, latestVersion.patch)
 	}
 
-	buildAndLog(ctx, pluginName, srcDir, buildDir, "repo")
-}
-
-func buildPlugin(ctx context.Context, pluginName, sourceDir, buildDir string, cleanup ...bool) error {
-	logger.Info("Building plugin as shared object file...")
-
-	_, err1 := os.Stat(filepath.Join(sourceDir, "go.mod"))
-	_, err2 := os.Stat(filepath.Join(sourceDir, "plugin.go"))
-	if os.IsNotExist(err1) || os.IsNotExist(err2) {
-		logger.Error("This repository is not a UAG plugin.")
-		if len(cleanup) > 0 && cleanup[0] {
-			if err := os.RemoveAll(sourceDir); err != nil {
-				logger.Error("Failed to remove plugin directory: %v", err)
-				return err
-			}
-		}
-		return fmt.Errorf("not a UAG plugin")
-	}
-	soFile, err := filepath.Abs(filepath.Join(buildDir, pluginName+".so"))
-	if err != nil {
-		logger.Error("Failed to resolve absolute path for plugin .so file: %v", err)
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(soFile), 0755); err != nil {
-		logger.Error("Failed to create compiled plugins directory: %v", err)
-		return err
-	}
-	// Enforce a build timeout to avoid indefinite hangs
-	var cancel context.CancelFunc
-	if _, ok := ctx.Deadline(); !ok {
-		ctx, cancel = context.WithTimeout(ctx, 2*time.Minute)
-		defer cancel()
-	}
-	cmdBuild := exec.CommandContext(ctx, "go", "build", "-buildmode=plugin", "-o", soFile, ".")
-	cmdBuild.Dir = sourceDir
-	cmdBuild.Stdout = os.Stdout
-	cmdBuild.Stderr = os.Stderr
-	if err := cmdBuild.Run(); err != nil {
-		logger.Error("Failed to build plugin as .so file: %v", err)
-		return err
-	}
-	logger.Info("Done.\nPlugin Installed Location: %s", buildDir)
-	return nil
+	utils.BuildAndLog(ctx, pluginName, srcDir, "repo")
 }

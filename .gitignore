@@ -39,3 +39,4 @@ go.work.sum
 /bin
 /.uag
 /.task
+.serena/
