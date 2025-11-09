@@ -1,11 +1,14 @@
 package utils
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/nikhiljohn10/uagplugin/logger"
@@ -90,15 +93,25 @@ func ensureLocalModule(ctx context.Context, sourceDir, projectRoot string) error
 	dropCmd.Dir = sourceDir
 	_ = dropCmd.Run()
 
-	replaceArg := fmt.Sprintf("-replace=%s=%s", modulePath, projectRoot)
-	replaceCmd := exec.CommandContext(ctx, "go", "mod", "edit", replaceArg)
-	replaceCmd.Dir = sourceDir
-	if output, err := replaceCmd.CombinedOutput(); err != nil {
-		logger.Error("Failed to align plugin module: %v", err)
-		if len(output) > 0 {
-			logger.Error("%s", string(output))
-		}
+	moduleRoot, err := findModuleRoot(projectRoot, modulePath)
+	if err != nil {
+		logger.Error("Failed to inspect local module: %v", err)
 		return err
+	}
+
+	if moduleRoot != "" {
+		replaceArg := fmt.Sprintf("-replace=%s=%s", modulePath, moduleRoot)
+		replaceCmd := exec.CommandContext(ctx, "go", "mod", "edit", replaceArg)
+		replaceCmd.Dir = sourceDir
+		if output, err := replaceCmd.CombinedOutput(); err != nil {
+			logger.Error("Failed to align plugin module: %v", err)
+			if len(output) > 0 {
+				logger.Error("%s", string(output))
+			}
+			return err
+		}
+	} else if logger.IsDebugMode() {
+		logger.Debug("Local module %q not found; relying on remote module", modulePath)
 	}
 
 	tidyCmd := exec.CommandContext(ctx, "go", "mod", "tidy")
@@ -110,4 +123,43 @@ func ensureLocalModule(ctx context.Context, sourceDir, projectRoot string) error
 		return err
 	}
 	return nil
+}
+
+func findModuleRoot(startDir, modulePath string) (string, error) {
+	dir := startDir
+	for {
+		modFile := filepath.Join(dir, "go.mod")
+		contents, err := os.ReadFile(modFile)
+		if err == nil {
+			if extractModulePath(contents) == modulePath {
+				return dir, nil
+			}
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", nil
+}
+
+func extractModulePath(content []byte) string {
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "module ") {
+			if idx := strings.Index(line, "//"); idx >= 0 {
+				line = strings.TrimSpace(line[:idx])
+			}
+			parts := strings.Fields(line)
+			if len(parts) >= 2 {
+				return parts[1]
+			}
+		}
+	}
+	return ""
 }
